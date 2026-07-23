@@ -1,0 +1,47 @@
+# -*- coding: utf-8 -*-
+"""
+config.py (root)
+ตั้งค่าแอปที่อ่านจาก environment variable ทั้งหมด — ห้าม hardcode ความลับในไฟล์นี้
+(อย่าสับสนกับ analyzer/config.py ซึ่งเป็นฐานความรู้เรื่องการวิเคราะห์ลิงก์ คนละเรื่องกัน)
+"""
+import os
+
+
+def _bool_env(name: str, default: bool) -> bool:
+    val = os.environ.get(name)
+    if val is None:
+        return default
+    return val.strip().lower() in ("1", "true", "yes", "on")
+
+
+class Config:
+    ENV = os.environ.get("FLASK_ENV", "development")
+    DEBUG = ENV != "production"
+
+    SECRET_KEY = os.environ.get("SECRET_KEY")
+    if not SECRET_KEY:
+        if ENV == "production":
+            raise RuntimeError(
+                "ต้องตั้งค่า SECRET_KEY ผ่าน environment variable ก่อนรันแบบ production "
+                "(ดูตัวอย่างใน .env.example)")
+        SECRET_KEY = "dev-only-secret-do-not-use-in-production"
+
+    basedir = os.path.abspath(os.path.dirname(__file__))
+    SQLALCHEMY_DATABASE_URI = os.environ.get(
+        "DATABASE_URL", f"sqlite:///{os.path.join(basedir, 'instance', 'app.db')}")
+    SQLALCHEMY_TRACK_MODIFICATIONS = False
+
+    # origin ที่อนุญาตให้เรียก API ข้าม origin ได้ (คั่นด้วย ,) — "*" เฉพาะตอน dev เท่านั้น
+    CORS_ORIGINS = os.environ.get("CORS_ORIGINS", "*")
+
+    SESSION_COOKIE_HTTPONLY = True
+    SESSION_COOKIE_SAMESITE = "Lax"
+    SESSION_COOKIE_SECURE = _bool_env("SESSION_COOKIE_SECURE", ENV == "production")
+
+    WTF_CSRF_TIME_LIMIT = None  # token อายุเท่ากับ session ไม่หมดอายุแยก
+
+    # โควตาการเช็คเชิงลึกของแผนฟรี (ครั้ง/วัน) — ปรับได้ผ่าน env โดยไม่ต้องแก้โค้ด
+    FREE_DEEP_CHECKS_PER_DAY = int(os.environ.get("FREE_DEEP_CHECKS_PER_DAY", "5"))
+    PREMIUM_PRICE_THB = int(os.environ.get("PREMIUM_PRICE_THB", "99"))
+    PREMIUM_DURATION_DAYS = int(os.environ.get("PREMIUM_DURATION_DAYS", "30"))
+    BULK_CHECK_MAX_URLS = int(os.environ.get("BULK_CHECK_MAX_URLS", "20"))

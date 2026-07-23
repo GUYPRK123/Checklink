@@ -1,0 +1,100 @@
+// dashboard.js — หน้าบัญชีของฉัน: โควตา, ประวัติ, API key, bulk check
+import { auth, billing, history } from "./api.js";
+import { mountNav } from "./nav.js";
+import { mountBulkChecker } from "./components/bulkChecker.js";
+
+mountNav(document.getElementById("nav-actions"));
+
+function esc(s) { return String(s).replace(/[&<>"]/g, c => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;" }[c])); }
+
+async function init() {
+  const { user } = await auth.me().catch(() => ({ user: null }));
+  if (!user) {
+    document.getElementById("require-login").hidden = false;
+    return;
+  }
+  document.getElementById("dashboard-content").hidden = false;
+
+  const status = await billing.status();
+  renderPlanStatus(status);
+
+  if (status.is_premium) {
+    document.getElementById("bulk-panel").hidden = false;
+    mountBulkChecker(document.getElementById("bulk-panel"), 20, refreshHistory);
+    renderApiKeySection();
+  } else {
+    document.getElementById("api-key-box").innerHTML =
+      `<p class="form-footer" style="text-align:left">อัพเกรดเป็น<a href="premium.html">พรีเมียม</a>เพื่อใช้งาน API key</p>`;
+  }
+
+  document.getElementById("export-link").href = history.exportUrl();
+  if (!status.is_premium) {
+    document.getElementById("export-link").addEventListener("click", (e) => {
+      e.preventDefault();
+      window.location.href = "premium.html";
+    });
+  }
+
+  await refreshHistory();
+}
+
+async function refreshHistory() {
+  const { history: rows } = await history.list();
+  renderHistory(rows);
+}
+
+function renderPlanStatus(status) {
+  const el = document.getElementById("plan-status");
+  if (status.is_premium) {
+    el.innerHTML = `<div class="a-tag ok"><span class="dot"></span>
+      สมาชิกพรีเมียม — ใช้ได้ถึง ${new Date(status.premium_until).toLocaleDateString("th-TH")} (เช็คเชิงลึกไม่จำกัด)</div>`;
+    return;
+  }
+  const pct = Math.round((status.deep_checks_remaining / status.free_daily_limit) * 100);
+  el.innerHTML = `
+    <div class="a-tag"><span class="dot"></span> แผนฟรี — เช็คเชิงลึกเหลือวันนี้
+      <strong style="margin:0 4px">${status.deep_checks_remaining}</strong> / ${status.free_daily_limit} ครั้ง</div>
+    <div class="quota-bar"><div class="quota-bar-fill" style="width:${pct}%"></div></div>
+    <div class="input-row" style="margin-top:12px">
+      <a class="btn" href="premium.html" style="width:100%; text-align:center">อัพเกรดเป็นพรีเมียม</a>
+    </div>`;
+}
+
+function renderHistory(rows) {
+  const el = document.getElementById("history-list");
+  if (!rows.length) {
+    el.innerHTML = `<p style="color:var(--muted); font-size:.88rem">ยังไม่มีประวัติการตรวจ</p>`;
+    return;
+  }
+  el.innerHTML = rows.map(r => `
+    <div class="history-row">
+      <span class="history-url" title="${esc(r.url)}">${esc(r.url)}</span>
+      <span class="history-badge ${r.verdict_color}">${esc(r.verdict_label)}</span>
+    </div>`).join("");
+}
+
+async function renderApiKeySection() {
+  const el = document.getElementById("api-key-box");
+  const info = await billing.getApiKey();
+  el.innerHTML = info.has_key
+    ? `<p style="font-size:.88rem; color:var(--muted); margin:0 0 10px">
+        มี API key อยู่แล้ว (${esc(info.key_prefix)}...) สร้างใหม่จะแทนที่ของเดิม</p>
+       <button class="btn secondary" id="gen-key">สร้าง API key ใหม่</button>`
+    : `<p style="font-size:.88rem; color:var(--muted); margin:0 0 10px">ยังไม่มี API key</p>
+       <button class="btn secondary" id="gen-key">สร้าง API key</button>`;
+
+  el.querySelector("#gen-key").addEventListener("click", async () => {
+    try {
+      const res = await billing.createApiKey();
+      el.innerHTML = `<p style="font-size:.88rem; color:var(--muted); margin:0 0 6px">
+          บันทึกกุญแจนี้ไว้ให้ดี ระบบจะไม่แสดงค่าเต็มอีกครั้ง:</p>
+        <div class="apikey-box">${esc(res.api_key)}</div>
+        <p style="font-size:.8rem; color:var(--muted); margin-top:8px">
+          ใช้งานโดยแนบ header <code>X-API-Key</code> ตอนเรียก <code>/api/check</code></p>`;
+    } catch (err) {
+      el.innerHTML = `<div class="form-error">${esc(err.message)}</div>`;
+    }
+  });
+}
+
+init();

@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>เช็กก่อนกด — ตรวจความเสี่ยงลิงก์และ QR Code</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="css/styles.css" />
+<!-- jsQR: ไลบรารีถอดรหัส QR Code ฝั่งเบราว์เซอร์ (อ่าน QR โดยไม่ต้องเปิดลิงก์) -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jsQR/1.4.0/jsQR.min.js"></script>
+</head>
+<body>
+  <header class="site-header">
+    <div class="container header-inner">
+      <div class="brand">
+        <span class="brand-mark" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></svg>
+        </span>
+        <div>
+          <div class="brand-name">เช็กก่อนกด</div>
+          <div class="brand-sub">ตรวจความเสี่ยงลิงก์และ QR Code ก่อนกด</div>
+        </div>
+      </div>
+      <nav class="nav-actions" id="nav-actions"></nav>
+    </div>
+  </header>
+
+  <main class="container">
+    <p class="intro">
+      วางลิงก์หรือสแกน QR Code ที่ได้รับมา ระบบจะ<strong>เช็กให้โดยที่คุณไม่ต้องกดเข้าไปเอง</strong>
+      โดยตรวจ 4 ชั้น: เทียบฐานข้อมูล สกมช. → วิเคราะห์รูปแบบลิงก์แบบเรียลไทม์ → ตามปลายทางจริงของลิงก์ย่อ
+      → ตรวจอายุโดเมน/ใบรับรอง SSL/เนื้อหาเว็บจริงเพิ่มเติม
+    </p>
+
+    <!-- แท็บเลือกโหมด -->
+    <div class="tabs" role="tablist">
+      <button class="tab is-active" id="tab-link" role="tab" aria-selected="true">ตรวจลิงก์</button>
+      <button class="tab" id="tab-qr" role="tab" aria-selected="false">ตรวจ QR Code</button>
+    </div>
+
+    <!-- Component: ตรวจลิงก์ -->
+    <section id="panel-link" class="panel"></section>
+    <!-- Component: ตรวจ QR -->
+    <section id="panel-qr" class="panel" hidden></section>
+
+    <!-- Component: การ์ดผลลัพธ์ (ใช้ร่วมกันทั้งสองโหมด) -->
+    <section id="result" aria-live="polite"></section>
+
+    <p class="disclaimer">
+      <strong>ระบบนี้เป็นตัวช่วยเตือนสติ ไม่ใช่คำตัดสินถูก/ผิด 100%</strong><br>
+      ถ้าผลขึ้น “ปลอดภัย” แต่ยังไม่มั่นใจ ให้พิมพ์ชื่อเว็บเองหรือเข้าผ่านแอปทางการแทนการกดลิงก์เสมอ
+    </p>
+  </main>
+
+  <!-- โหลดแบบ ES modules: แต่ละ component แยกไฟล์ชัดเจน -->
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>

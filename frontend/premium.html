@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>อัพเกรดพรีเมียม — เช็กก่อนกด</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="css/styles.css" />
+</head>
+<body>
+  <header class="site-header">
+    <div class="container header-inner">
+      <a href="index.html" class="brand" style="text-decoration:none; color:inherit">
+        <span class="brand-mark" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></svg>
+        </span>
+        <div>
+          <div class="brand-name">เช็กก่อนกด</div>
+          <div class="brand-sub">ตรวจความเสี่ยงลิงก์และ QR Code ก่อนกด</div>
+        </div>
+      </a>
+      <nav class="nav-actions" id="nav-actions"></nav>
+    </div>
+  </header>
+
+  <main class="container">
+    <p class="intro">เปรียบเทียบแผนการใช้งาน และปลดล็อกฟีเจอร์เพิ่มเติมด้วยพรีเมียม</p>
+
+    <div id="plans" class="plans"></div>
+
+    <section class="panel" id="checkout-section" hidden>
+      <div class="card">
+        <div class="demo-banner">
+          <strong>นี่คือระบบจำลองการชำระเงินเพื่อการสาธิต (โปรเจกต์จบ)</strong><br>
+          ไม่มีการเชื่อมต่อผู้ให้บริการรับชำระเงินจริง ไม่มีการตัดเงินเกิดขึ้นจริง
+          และไม่ควรกรอกข้อมูลบัตร/บัญชีจริงของท่านที่นี่
+        </div>
+
+        <div id="checkout-msg"></div>
+
+        <div class="pay-methods" role="tablist">
+          <button class="tab is-active" id="tab-card" role="tab">บัตรเครดิต/เดบิต (จำลอง)</button>
+          <button class="tab" id="tab-promptpay" role="tab">พร้อมเพย์ (จำลอง)</button>
+        </div>
+
+        <form id="card-form">
+          <div class="form-group">
+            <label for="card-number">หมายเลขบัตร (จำลอง — ใส่ตัวเลข 16 หลักอะไรก็ได้)</label>
+            <input id="card-number" inputmode="numeric" placeholder="4242 4242 4242 4242" maxlength="19" required />
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label for="card-expiry">วันหมดอายุ (MM/YY)</label>
+              <input id="card-expiry" placeholder="12/29" maxlength="5" required />
+            </div>
+            <div class="form-group">
+              <label for="card-cvc">CVC</label>
+              <input id="card-cvc" inputmode="numeric" placeholder="123" maxlength="4" required />
+            </div>
+          </div>
+          <div class="input-row"><button class="btn" type="submit" style="width:100%">ยืนยันชำระเงิน (จำลอง)</button></div>
+        </form>
+
+        <form id="promptpay-form" hidden>
+          <div class="form-group">
+            <label for="pp-ref">หมายเลขอ้างอิงพร้อมเพย์ (จำลอง — ใส่ตัวเลข 10-15 หลักอะไรก็ได้)</label>
+            <input id="pp-ref" inputmode="numeric" placeholder="0812345678" required />
+          </div>
+          <div class="input-row"><button class="btn" type="submit" style="width:100%">ยืนยันชำระเงิน (จำลอง)</button></div>
+        </form>
+      </div>
+    </section>
+  </main>
+
+  <script type="module" src="js/premium.js"></script>
+</body>
+</html>

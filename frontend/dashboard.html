@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>บัญชีของฉัน — เช็กก่อนกด</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="css/styles.css" />
+</head>
+<body>
+  <header class="site-header">
+    <div class="container header-inner">
+      <a href="index.html" class="brand" style="text-decoration:none; color:inherit">
+        <span class="brand-mark" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></svg>
+        </span>
+        <div>
+          <div class="brand-name">เช็กก่อนกด</div>
+          <div class="brand-sub">ตรวจความเสี่ยงลิงก์และ QR Code ก่อนกด</div>
+        </div>
+      </a>
+      <nav class="nav-actions" id="nav-actions"></nav>
+    </div>
+  </header>
+
+  <main class="container">
+    <div id="require-login" hidden class="panel">
+      <div class="card">
+        กรุณา<a href="account.html">เข้าสู่ระบบ</a>ก่อนเพื่อดูบัญชีของคุณ
+      </div>
+    </div>
+
+    <div id="dashboard-content" hidden>
+      <section class="panel">
+        <div class="card">
+          <div class="field-label">สถานะแผนการใช้งาน</div>
+          <div id="plan-status"></div>
+        </div>
+      </section>
+
+      <section class="panel" id="bulk-panel" hidden></section>
+
+      <div class="dash-grid">
+        <section class="panel">
+          <div class="card">
+            <div class="field-label">ประวัติการตรวจล่าสุด</div>
+            <div id="history-list"></div>
+            <div class="input-row" style="margin-top:12px">
+              <a class="btn secondary" id="export-link" href="#" style="width:100%; text-align:center">Export CSV</a>
+            </div>
+          </div>
+        </section>
+
+        <section class="panel">
+          <div class="card">
+            <div class="field-label">API key (พรีเมียม)</div>
+            <div id="api-key-box"></div>
+          </div>
+        </section>
+      </div>
+    </div>
+  </main>
+
+  <script type="module" src="js/dashboard.js"></script>
+</body>
+</html>

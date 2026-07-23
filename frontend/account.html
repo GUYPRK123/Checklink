@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>เข้าสู่ระบบ / สมัครสมาชิก — เช็กก่อนกด</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="css/styles.css" />
+</head>
+<body>
+  <header class="site-header">
+    <div class="container header-inner">
+      <a href="index.html" class="brand" style="text-decoration:none; color:inherit">
+        <span class="brand-mark" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></svg>
+        </span>
+        <div>
+          <div class="brand-name">เช็กก่อนกด</div>
+          <div class="brand-sub">ตรวจความเสี่ยงลิงก์และ QR Code ก่อนกด</div>
+        </div>
+      </a>
+      <nav class="nav-actions" id="nav-actions"></nav>
+    </div>
+  </header>
+
+  <main class="container" style="max-width:420px">
+    <div class="tabs" role="tablist" style="margin:24px auto 0">
+      <button class="tab is-active" id="tab-login" role="tab" aria-selected="true">เข้าสู่ระบบ</button>
+      <button class="tab" id="tab-register" role="tab" aria-selected="false">สมัครสมาชิก</button>
+    </div>
+
+    <section class="panel">
+      <div class="card">
+        <div id="form-msg"></div>
+
+        <form id="login-form">
+          <div class="form-group">
+            <label for="login-email">อีเมล</label>
+            <input id="login-email" type="email" autocomplete="email" required />
+          </div>
+          <div class="form-group">
+            <label for="login-password">รหัสผ่าน</label>
+            <input id="login-password" type="password" autocomplete="current-password" required />
+          </div>
+          <div class="input-row"><button class="btn" type="submit" style="width:100%">เข้าสู่ระบบ</button></div>
+        </form>
+
+        <form id="register-form" hidden>
+          <div class="form-group">
+            <label for="reg-email">อีเมล</label>
+            <input id="reg-email" type="email" autocomplete="email" required />
+          </div>
+          <div class="form-group">
+            <label for="reg-password">รหัสผ่าน (อย่างน้อย 8 ตัวอักษร)</label>
+            <input id="reg-password" type="password" autocomplete="new-password" minlength="8" required />
+          </div>
+          <div class="input-row"><button class="btn" type="submit" style="width:100%">สมัครสมาชิกฟรี</button></div>
+        </form>
+
+        <p class="form-footer">
+          สมัครฟรีเพื่อปลดล็อกการตรวจเชิงลึก (ตาม redirect, อายุโดเมน, SSL, เนื้อหาเว็บจริง)
+          — การเช็คลิงก์พื้นฐานใช้ได้ฟรีไม่จำกัดโดยไม่ต้องสมัครอยู่แล้ว
+        </p>
+      </div>
+    </section>
+  </main>
+
+  <script type="module" src="js/account.js"></script>
+</body>
+</html>
