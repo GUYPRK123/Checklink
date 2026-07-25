@@ -1,0 +1,33 @@
+# ===== Python =====
+__pycache__/
+*.py[cod]
+*.egg-info/
+
+# ===== Virtual environment =====
+.venv/
+venv/
+env/
+
+# ===== Secrets / environment =====
+# ห้าม commit ค่าจริง (SECRET_KEY ฯลฯ) ให้ใช้ .env.example เป็นแม่แบบแทน
+.env
+.env.local
+.env.*.local
+
+# ===== Database (มี email + password hash ของ user จริง) =====
+instance/
+*.db
+*.sqlite
+*.sqlite3
+
+# ===== Cache ที่ระบบสร้างเองตอนรัน =====
+backend/analyzer/blocklist_cache.txt
+
+# ===== Log =====
+*.log
+
+# ===== OS / editor =====
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
