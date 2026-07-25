@@ -34,6 +34,12 @@ class Config:
     # origin ที่อนุญาตให้เรียก API ข้าม origin ได้ (คั่นด้วย ,) — "*" เฉพาะตอน dev เท่านั้น
     CORS_ORIGINS = os.environ.get("CORS_ORIGINS", "*")
 
+    # true เฉพาะตอนมี Nginx (หรือ reverse proxy อื่น) อยู่หน้า waitress บนเครื่องเดียวกัน
+    # เท่านั้น (ดู deploy/) เพื่อให้ IP ผู้ใช้จริง/https ถูกอ่านถูกจาก X-Forwarded-*
+    # ห้ามเปิดถ้า waitress เปิดสู่อินเทอร์เน็ตตรง ๆ เพราะ header นี้ปลอมได้ (จะทำให้
+    # ข้าม rate limit ได้ง่าย ๆ ด้วยการปลอม X-Forwarded-For)
+    BEHIND_PROXY = _bool_env("BEHIND_PROXY", False)
+
     SESSION_COOKIE_HTTPONLY = True
     SESSION_COOKIE_SAMESITE = "Lax"
     SESSION_COOKIE_SECURE = _bool_env("SESSION_COOKIE_SECURE", ENV == "production")

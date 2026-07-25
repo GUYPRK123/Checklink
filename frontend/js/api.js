@@ -1,13 +1,18 @@
 // api.js — ตัวกลางคุยกับ backend
 //
 // เลือก BASE_URL อัตโนมัติ:
-//  - ถ้าเปิดหน้าเว็บผ่าน Flask (พอร์ต 5000) -> ใช้ origin เดิม (ไม่มีปัญหา CORS)
-//  - ถ้าเปิดผ่าน Live Server/พอร์ตอื่น หรือ file:// -> ชี้ไปที่ backend Flask โดยตรง
-//    (ต้องรัน backend ที่พอร์ต 5000 และมี flask-cors ติดตั้งไว้)
+//  - ถ้าเปิดหน้าเว็บผ่าน Flask ตรง ๆ (พอร์ต 5000) -> ใช้ origin เดิม (same-origin)
+//  - ถ้าเปิดผ่าน localhost/127.0.0.1 พอร์ตอื่น (เช่น Live Server ตอน dev หน้าเว็บ)
+//    -> ชี้ไปที่ backend Flask dev server ที่ 127.0.0.1:5000 โดยตรง
+//  - กรณีอื่นทั้งหมด (โดเมนจริงตอน production ที่มี Nginx reverse proxy อยู่หน้า Flask
+//    เช่นเข้าผ่าน 443/80) -> ต้องเป็น same-origin เสมอ ห้าม hardcode host/port ของ
+//    เครื่อง dev ไม่งั้นเบราว์เซอร์ผู้ใช้จะพยายามยิงไปที่ 127.0.0.1 ของเครื่องตัวเอง
 const BASE_URL = (() => {
   const loc = window.location;
   if (loc.protocol.startsWith("http") && loc.port === "5000") return "";
-  return "http://127.0.0.1:5000";
+  const isLocalDevHost = loc.hostname === "localhost" || loc.hostname === "127.0.0.1";
+  if (isLocalDevHost) return "http://127.0.0.1:5000";
+  return "";
 })();
 
 let _csrfToken = null;

@@ -4,8 +4,10 @@ app.py
 เซิร์ฟเวอร์ Flask: ให้บริการทั้ง REST API และไฟล์ frontend
 
 รันตอนพัฒนา:      python app.py            แล้วเปิด  http://127.0.0.1:5000
-รันตอน production: waitress-serve --host=0.0.0.0 --port=5000 app:app
-                    (ตั้ง FLASK_ENV=production และค่าใน .env ก่อนเสมอ ดู .env.example)
+รันตอน production: อยู่หลัง Nginx reverse proxy เสมอ (ดู deploy/) —
+                    waitress-serve --host=127.0.0.1 --port=5000 app:app
+                    (ตั้ง FLASK_ENV=production, BEHIND_PROXY=true และค่าอื่นใน .env
+                    ก่อนเสมอ ดู .env.example และ deploy/nginx.conf, deploy/phishing-checker.service)
 
 API หลัก:  POST /api/check   body = {"url": "..."}   -> ผลการวิเคราะห์ (JSON)
 """
@@ -14,6 +16,7 @@ import threading
 
 from flask import Flask, send_from_directory, jsonify, request
 from flask_cors import CORS
+from werkzeug.middleware.proxy_fix import ProxyFix
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -54,6 +57,14 @@ def _preload_blocklist():
 def create_app() -> Flask:
     app = Flask(__name__, static_folder=None)
     app.config.from_object(Config)
+
+    if app.config["BEHIND_PROXY"]:
+        # เชื่อถือ header X-Forwarded-For/-Proto จาก reverse proxy 1 ชั้น (Nginx บนเครื่อง
+        # เดียวกัน — ดู deploy/nginx.conf) เพื่อให้ request.remote_addr (ใช้ทำ rate limit)
+        # และ request.is_secure (ใช้ตัดสิน HSTS header) ถูกต้อง แทนที่จะเห็นทุก request
+        # เป็น 127.0.0.1/http เหมือนกันหมด — เปิดเฉพาะตอนมี Nginx อยู่หน้าจริงเท่านั้น
+        # (ห้ามเปิดถ้า waitress เปิดสู่อินเทอร์เน็ตตรง ๆ เพราะ header นี้ปลอมได้)
+        app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1)
 
     origins = app.config["CORS_ORIGINS"]
     cors_origins = "*" if origins == "*" else [o.strip() for o in origins.split(",") if o.strip()]
