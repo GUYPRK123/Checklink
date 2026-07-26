@@ -21,7 +21,7 @@ function anatomyHTML(a, bad) {
   const proto = a.protocol_known ? `${esc(a.protocol)}://` : "";
   const sub = a.subdomain ? `<span class="seg-sub">${esc(a.subdomain)}.</span>` : "";
   return `<div class="anatomy">
-    <div class="a-label">ส่วนประกอบของลิงก์ — ให้ดูที่ “โดเมนจริง” เป็นหลัก ไม่ใช่ส่วนหน้า</div>
+    <div class="a-label">ส่วนประกอบของลิงก์ — เชื่อ “โดเมนจริง” (ช่องไฮไลต์สีเข้ม) เป็นหลัก อย่าเชื่อคำที่อยู่หน้ามัน</div>
     <div class="urlbits"><span class="seg-proto">${proto}</span>${sub}<span class="seg-domain ${bad?'bad':''}">${esc(a.registrable)}</span><span class="seg-path">${esc(a.path||"")}</span></div>
     <div class="a-tag ${bad?'bad':''}"><span class="dot"></span> โดเมนจริงของลิงก์นี้คือ <strong style="margin-left:4px">${esc(a.registrable)}</strong></div>
   </div>`;
@@ -31,7 +31,7 @@ function destinationHTML(dest) {
   if (!dest) return "";
   if (dest.blocked) {
     return `<div class="anatomy dest">
-      <div class="a-label">เส้นทางปลายทางจริง (ชั้นที่ 3 — Redirect Resolution)</div>
+      <div class="a-label">เส้นทางปลายทางจริง (ชั้นที่ 3 — ตามลิงก์ที่เปลี่ยนหน้า/redirect)</div>
       <div class="a-tag bad"><span class="dot"></span> ${esc(dest.blocked_reason || "ปลายทางผิดปกติ ไม่อนุญาตให้ตรวจต่อ")}</div>
     </div>`;
   }
@@ -60,9 +60,9 @@ function layer4HTML(res) {
     const text = (bad || warn)
       ? `จดทะเบียนเมื่อ ${age.registered_on} (${age.age_days} วันก่อน) — ยังใหม่มาก`
       : `จดทะเบียนมาแล้ว ${age.age_days} วัน (ตั้งแต่ ${age.registered_on})`;
-    rows.push(["อายุโดเมน (WHOIS/RDAP)", state, text]);
+    rows.push(["อายุโดเมน (วันที่จดทะเบียน)", state, text]);
   } else {
-    rows.push(["อายุโดเมน (WHOIS/RDAP)", "muted", "เช็กไม่ได้ตอนนี้ (นามสกุลนี้ไม่รองรับ หรือเครือข่ายมีปัญหา)"]);
+    rows.push(["อายุโดเมน (วันที่จดทะเบียน)", "muted", "เช็กไม่ได้ตอนนี้ (นามสกุลนี้ไม่รองรับ หรือเครือข่ายมีปัญหา)"]);
   }
 
   const ssl = l4.ssl || {};
@@ -132,27 +132,27 @@ function techHTML(res) {
   // คำอธิบายประจำแต่ละส่วน: อธิบายว่า "ของจริงต้องเป็นยังไง" ไม่ใช่แค่สะท้อนสิ่งที่ผู้ใช้พิมพ์
   const domainNote = a.is_ip
     ? "ลิงก์นี้ใช้เลข IP แทนชื่อเว็บ — เว็บทางการแทบไม่ทำแบบนี้"
-    : "ส่วนที่ระบุเจ้าของเว็บตัวจริง อ่านจาก \"ท้ายชื่อโฮสต์\" เท่านั้น ปลอมไม่ได้เพราะต้องจดทะเบียน";
+    : "นี่คือส่วนที่บอกว่าเว็บนี้เป็นของใครจริง ๆ ต้องดูจากส่วนท้ายสุดของชื่อเว็บเท่านั้น ปลอมแปลงไม่ได้เพราะต้องจดทะเบียนถูกต้องตามกฎหมาย";
   const subNote = a.subdomain
-    ? "เจ้าของโดเมนจริงตั้งคำนี้เป็นอะไรก็ได้ ใช้ยืนยันตัวตนไม่ได้ — มิจฉาชีพชอบเอาชื่อแบรนด์มาใส่ตรงนี้ให้ดูเหมือนของจริง"
+    ? "ส่วนนี้เจ้าของโดเมนจริงจะตั้งเป็นคำอะไรก็ได้ตามใจ จึงใช้ยืนยันตัวตนไม่ได้ — มิจฉาชีพชอบเอาชื่อแบรนด์มาใส่ตรงนี้ให้ดูเหมือนของจริง"
     : "ลิงก์นี้ไม่มีโดเมนย่อย";
   const protoNote = !a.protocol_known
-    ? "ลิงก์ไม่ได้ระบุโปรโตคอล เบราว์เซอร์จะเติมให้เอง"
+    ? "ลิงก์ไม่ได้ระบุวิธีเชื่อมต่อ เบราว์เซอร์จะเติมให้เอง"
     : a.protocol === "https"
-      ? "เข้ารหัสการเชื่อมต่อ (แต่เว็บหลอกก็ใช้ https ได้ — ไม่ได้แปลว่าปลอดภัย)"
+      ? "เข้ารหัสข้อมูลระหว่างทาง (แต่เว็บหลอกก็ทำ https ได้เหมือนกัน — ไม่ได้แปลว่าเว็บนี้ปลอดภัย)"
       : a.protocol === "http"
-        ? "ไม่เข้ารหัส ข้อมูลที่กรอกอาจถูกดักอ่านได้ เว็บทางการปัจจุบันใช้ https แทบทั้งหมด"
+        ? "ไม่เข้ารหัส ข้อมูลที่กรอกอาจถูกดักอ่านได้ระหว่างทาง เว็บทางการปัจจุบันใช้ https แทบทั้งหมด"
         : "";
 
   const rows = [
     ["ที่มาของผล", src, "", ""],
-    ["โดเมนจริง (registrable domain)", a.registrable || "-",
+    ["โดเมนจริง (เจ้าของเว็บตัวจริง)", a.registrable || "-",
       a.is_ip ? "warn" : "ok", domainNote],
-    ["โดเมนย่อย (subdomain)", a.subdomain || "(ไม่มี)",
+    ["โดเมนย่อย (ส่วนหน้าที่ปลอมได้)", a.subdomain || "(ไม่มี)",
       a.subdomain ? "" : "", subNote],
   ];
   if (!a.is_ip) {
-    rows.push(["นามสกุลโดเมน (TLD)", a.tld ? "." + a.tld : "-",
+    rows.push(["นามสกุลโดเมน", a.tld ? "." + a.tld : "-",
       a.tld_risk || "", a.tld_note || ""]);
   }
   rows.push(
@@ -164,7 +164,7 @@ function techHTML(res) {
   );
   const d = res.destination;
   if (d && (d.redirected || d.blocked)) {
-    rows.push(["ชั้นที่ 3: ตรวจปลายทางจริง", d.blocked ? "บล็อก (ผิดปกติ)" : `${d.hops} redirect`,
+    rows.push(["ชั้นที่ 3: ตรวจปลายทางจริง", d.blocked ? "บล็อก (ผิดปกติ)" : `เปลี่ยนหน้า ${d.hops} ครั้งก่อนถึงปลายทาง`,
       d.blocked ? "warn" : "", d.blocked ? d.blocked_reason
         : `ปลายทางจริง: ${d.final_url}`]);
   }

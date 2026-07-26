@@ -41,6 +41,9 @@ async function init() {
 async function refreshHistory() {
   const { history: rows } = await history.list();
   renderHistory(rows);
+  if (window.location.hash === "#history") {
+    document.getElementById("history").scrollIntoView({ behavior: "smooth", block: "start" });
+  }
 }
 
 function renderPlanStatus(status) {

@@ -185,10 +185,12 @@ details.tech>summary::-webkit-details-marker{display:none}
 
 /* ---------- header nav (account/premium) ---------- */
 .header-inner{justify-content:space-between}
-.nav-actions{display:flex; align-items:center; gap:8px}
+.nav-actions{display:flex; align-items:center; flex-wrap:wrap; justify-content:flex-end; gap:8px}
 .nav-actions .btn{padding:9px 16px; font-size:.88rem; height:auto}
 .nav-actions .btn.ghost{background:transparent; color:var(--ink)}
 .nav-actions .btn.ghost:hover{background:#eef2f9}
+.nav-actions .nav-link.is-current{background:#eaf0fd; color:var(--brand); font-weight:700}
+.nav-actions .nav-link.is-current:hover{background:#eaf0fd}
 .nav-actions .nav-plan{font-size:.78rem; font-weight:700; padding:4px 9px; border-radius:7px;
   background:#eef2f9; color:var(--muted)}
 .nav-actions .nav-plan.is-premium{background:linear-gradient(160deg,#4a86f7,#2257c9); color:#fff}
