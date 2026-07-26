@@ -2,6 +2,7 @@
 import { auth, billing, history } from "./api.js";
 import { mountNav } from "./nav.js";
 import { mountBulkChecker } from "./components/bulkChecker.js";
+import { mountBulkQrChecker } from "./components/bulkQrChecker.js";
 
 mountNav(document.getElementById("nav-actions"));
 
@@ -21,6 +22,8 @@ async function init() {
   if (status.is_premium) {
     document.getElementById("bulk-panel").hidden = false;
     mountBulkChecker(document.getElementById("bulk-panel"), 20, refreshHistory);
+    document.getElementById("bulk-qr-panel").hidden = false;
+    mountBulkQrChecker(document.getElementById("bulk-qr-panel"), 20, refreshHistory);
     renderApiKeySection();
   } else {
     document.getElementById("api-key-box").innerHTML =
@@ -63,17 +66,32 @@ function renderPlanStatus(status) {
     </div>`;
 }
 
+// ชื่อชนิด QR ที่เก็บไว้ในประวัติ (ต้องตรงกับ analyzer/qr_payload.py ฝั่ง backend)
+const QR_TYPE_LABEL = {
+  url: "ลิงก์จาก QR", promptpay: "QR พร้อมเพย์", emv_unknown: "QR ชำระเงิน",
+  wifi: "QR Wi-Fi", tel: "QR เบอร์โทร", sms: "QR ข้อความ SMS", email: "QR อีเมล",
+  vcard: "QR นามบัตร", geo: "QR พิกัด", text: "QR ข้อความ",
+};
+
 function renderHistory(rows) {
   const el = document.getElementById("history-list");
   if (!rows.length) {
     el.innerHTML = `<p style="color:var(--muted); font-size:.88rem">ยังไม่มีประวัติการตรวจ</p>`;
     return;
   }
-  el.innerHTML = rows.map(r => `
-    <div class="history-row">
-      <span class="history-url" title="${esc(r.url)}">${esc(r.url)}</span>
+  el.innerHTML = rows.map(r => {
+    // รายการที่มาจาก QR แสดงภาพย่อของ QR ที่สแกนไว้ด้วย (ถ้าเก็บไว้ตอนนั้น)
+    const thumb = r.qr_thumb
+      ? `<img class="history-thumb" src="${esc(r.qr_thumb)}" alt="ภาพ QR ที่สแกน" loading="lazy" />`
+      : r.source === "qr" ? `<span class="history-thumb is-empty" aria-hidden="true">QR</span>` : "";
+    const kind = r.source === "qr"
+      ? `<span class="history-kind">${esc(QR_TYPE_LABEL[r.qr_type] || "จาก QR")}</span>` : "";
+    return `<div class="history-row">
+      ${thumb}
+      <span class="history-url" title="${esc(r.url)}">${kind}${esc(r.url)}</span>
       <span class="history-badge ${r.verdict_color}">${esc(r.verdict_label)}</span>
-    </div>`).join("");
+    </div>`;
+  }).join("");
 }
 
 async function renderApiKeySection() {

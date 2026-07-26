@@ -24,7 +24,8 @@ function activate(mode) {
   panelLink.hidden = !isLink;
   panelQr.hidden = isLink;
   resultEl.innerHTML = "";        // ล้างผลเดิมเมื่อสลับโหมด
-  if (isLink) { qrComp.stop(); linkComp.focus(); }  // ปิดกล้องเมื่อออกจากโหมด QR
+  // ปิดกล้อง + หยุดรับภาพที่วางด้วย Ctrl+V เมื่อออกจากโหมด QR
+  if (isLink) { qrComp.stop(); linkComp.focus(); } else { qrComp.activate(); }
 }
 
 tabLink.addEventListener("click", () => activate("link"));

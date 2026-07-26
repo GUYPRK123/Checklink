@@ -76,6 +76,32 @@ export async function checkUrlsBulk(urls) {
   return authedFetch("/api/check/bulk", { body: { urls } });
 }
 
+// ตรวจเนื้อหาที่ถอดได้จาก QR (เบราว์เซอร์ถอดรูปเป็นข้อความแล้วส่งมาแค่ข้อความ ไม่ส่งรูปเต็ม)
+// thumb = ภาพย่อ data URI ขนาดเล็ก ใช้เก็บลงประวัติของสมาชิกพรีเมียม (ส่งได้/ไม่ส่งก็ได้)
+export async function checkQr(payload, thumb) {
+  let res;
+  try {
+    res = await fetch(`${BASE_URL}/api/check/qr`, {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ payload, thumb }),
+    });
+  } catch (e) {
+    throw new Error(
+      "ต่อ backend ไม่ได้ — ตรวจว่ารัน `python app.py` อยู่ แล้วเปิดหน้าเว็บที่ http://127.0.0.1:5000");
+  }
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || `เซิร์ฟเวอร์ตอบกลับผิดพลาด (${res.status})`);
+  }
+  return res.json();
+}
+
+export async function checkQrBulk(items) {
+  return authedFetch("/api/check/qr/bulk", { body: { items } });
+}
+
 export const auth = {
   me: () => fetch(`${BASE_URL}/api/auth/me`, { credentials: "include" }).then(r => r.json()),
   register: (email, password) => authedFetch("/api/auth/register", { body: { email, password } }),

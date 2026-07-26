@@ -54,6 +54,38 @@ def _preload_blocklist():
     print(f"[blocklist] โหลดโดเมนอันตรายจาก สกมช. แล้ว {n} รายการ")
 
 
+# คอลัมน์ที่ถูกเพิ่มเข้ามาทีหลัง (ตาราง -> {ชื่อคอลัมน์: นิยาม SQL})
+# db.create_all() สร้างได้เฉพาะ "ตารางใหม่" ไม่เพิ่มคอลัมน์ให้ตารางที่มีอยู่แล้ว ฐานข้อมูลของ
+# เครื่องที่รันเวอร์ชันเก่าอยู่จึงพังตอนอัปเดต ถ้าไม่เติมให้ — ตัวช่วยนี้เติมให้อัตโนมัติ
+_ADDED_COLUMNS = {
+    "scan_history": {
+        "source": "VARCHAR(10) NOT NULL DEFAULT 'link'",
+        "qr_type": "VARCHAR(20)",
+        "qr_thumb": "TEXT",
+    },
+}
+
+
+def _migrate_sqlite_columns() -> None:
+    """เพิ่มคอลัมน์ที่ยังไม่มีให้ตารางเดิม (รองรับเฉพาะ SQLite ซึ่งเป็นค่าเริ่มต้นของโปรเจกต์นี้)
+    ถ้าใช้ฐานข้อมูลอื่นผ่าน DATABASE_URL ให้ข้ามไป แล้วใช้เครื่องมือ migration ของฝั่งนั้นแทน"""
+    from sqlalchemy import inspect, text
+
+    if not db.engine.url.drivername.startswith("sqlite"):
+        return
+    inspector = inspect(db.engine)
+    existing_tables = set(inspector.get_table_names())
+    with db.engine.begin() as conn:
+        for table, columns in _ADDED_COLUMNS.items():
+            if table not in existing_tables:
+                continue  # ตารางเพิ่งถูกสร้างใหม่ -> มีคอลัมน์ครบอยู่แล้ว
+            have = {c["name"] for c in inspector.get_columns(table)}
+            for name, ddl in columns.items():
+                if name not in have:
+                    conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {name} {ddl}"))
+                    print(f"[db] เพิ่มคอลัมน์ {table}.{name} ให้ฐานข้อมูลเดิมแล้ว")
+
+
 def create_app() -> Flask:
     app = Flask(__name__, static_folder=None)
     app.config.from_object(Config)
@@ -99,6 +131,7 @@ def create_app() -> Flask:
 
     with app.app_context():
         os.makedirs(os.path.join(os.path.dirname(os.path.abspath(__file__)), "instance"), exist_ok=True)
+        _migrate_sqlite_columns()  # ต้องทำก่อน create_all() เพื่อให้เห็นตารางเวอร์ชันเดิมตามจริง
         db.create_all()
 
     _index = os.path.join(FRONTEND_DIR, "index.html")

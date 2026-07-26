@@ -42,6 +42,7 @@ strong{font-weight:600}
 .tab{border:none; background:transparent; padding:9px 18px; border-radius:9px; cursor:pointer;
   font-family:inherit; font-size:.95rem; font-weight:600; color:var(--muted)}
 .tab.is-active{background:var(--surface); color:var(--ink); box-shadow:var(--shadow)}
+.tab-note{margin:9px 0 0; font-size:.83rem; color:var(--muted)}
 .tab:focus-visible{outline:3px solid rgba(47,111,237,.35); outline-offset:2px}
 
 /* panels / cards */
@@ -80,9 +81,59 @@ strong{font-weight:600}
 .qr-scanline{position:absolute; inset:14% 14% auto 14%; height:2px; background:var(--brand-edge,#4a86f7);
   box-shadow:0 0 12px 2px rgba(74,134,247,.7); animation:scan 2s ease-in-out infinite}
 @keyframes scan{0%,100%{transform:translateY(0)} 50%{transform:translateY(180px)}}
+.qr-drop.is-over{border-color:var(--brand); background:#f9fbff}
+.qr-drop-hint{font-size:.82rem; color:#8b95a9}
 .qr-status{margin-top:10px; font-size:.88rem; color:var(--muted)}
+.qr-status.is-ok{color:var(--green)}
+.qr-status.is-warn{color:var(--amber)}
 .qr-decoded{margin-top:10px; font-family:"IBM Plex Mono",monospace; font-size:.85rem; word-break:break-all;
   background:#f0f3f9; border:1px solid var(--line); border-radius:8px; padding:8px 10px}
+
+/* ตัวเลือกเมื่อรูปเดียวมี QR หลายอัน */
+.qr-picker{margin-top:12px; display:flex; flex-direction:column; gap:8px}
+.qr-picker-label{font-size:.85rem; color:var(--amber); font-weight:600}
+.qr-pick{display:flex; align-items:center; gap:10px; width:100%; text-align:left; cursor:pointer;
+  font-family:inherit; background:var(--surface); border:1.5px solid var(--line); border-radius:10px; padding:10px 12px}
+.qr-pick:hover{border-color:var(--brand); background:#f9fbff}
+.qr-pick.is-picked{border-color:var(--brand); box-shadow:0 0 0 3px rgba(47,111,237,.12)}
+.qr-pick-n{flex:0 0 auto; width:22px; height:22px; border-radius:50%; display:grid; place-items:center;
+  background:var(--brand); color:#fff; font-size:.75rem; font-weight:700}
+.qr-pick code{font-family:"IBM Plex Mono",monospace; font-size:.78rem; word-break:break-all; color:var(--ink)}
+
+/* ---------- การ์ดอธิบายเนื้อหาใน QR ---------- */
+.qr-card{margin-top:14px; background:var(--surface); border:1px solid var(--line);
+  border-radius:var(--radius); box-shadow:var(--shadow); padding:20px}
+.qr-card.tone-green{border-color:#bfe6cb; background:var(--green-bg)}
+.qr-card.tone-yellow{border-color:#f6e1b0; background:var(--amber-bg)}
+.qr-card.tone-red{border-color:#f6c9c9; background:var(--red-bg)}
+.qr-card-head{display:flex; flex-direction:column; gap:3px; margin-bottom:14px}
+.qr-kind{font-weight:700; font-size:1.15rem}
+.qr-action-note{font-size:.85rem; color:var(--muted)}
+.qr-payload-box{background:rgba(255,255,255,.7); border:1px dashed rgba(31,42,68,.18);
+  border-radius:11px; padding:12px}
+.qr-payload-label{font-size:.8rem; color:var(--muted); margin-bottom:5px}
+.qr-payload{font-family:"IBM Plex Mono",monospace; font-size:.82rem; word-break:break-all; color:var(--ink)}
+.qr-actions{display:flex; gap:8px; flex-wrap:wrap; margin-top:12px}
+.qr-actions .btn{padding:9px 15px; font-size:.85rem}
+.qr-actions .btn.is-risky{background:#fdebec; color:var(--red)}
+.qr-actions .btn.is-risky:hover{background:#fbdcdf}
+.qr-repeat{margin-top:12px; padding:11px 13px; border-radius:10px; font-size:.86rem;
+  background:#eef2f9; display:flex; flex-direction:column; gap:2px}
+.qr-repeat.is-danger{background:var(--red-bg); border:1px solid #f6c9c9; color:var(--red)}
+.qr-repeat span{color:var(--muted); font-size:.82rem}
+.qr-repeat.is-danger span{color:var(--red)}
+
+/* ---------- สแกน QR หลายรูปพร้อมกัน (พรีเมียม) ---------- */
+.bulk-qr-note{font-size:.85rem; color:var(--muted); margin:0 0 12px}
+.bulkqr-row{padding:11px 0; border-top:1px solid rgba(31,42,68,.08)}
+.bulkqr-row:first-child{border-top:none}
+.bulkqr-main{display:flex; align-items:center; gap:10px}
+.bulkqr-name{flex:1; min-width:0; font-size:.86rem; font-weight:600; overflow:hidden;
+  text-overflow:ellipsis; white-space:nowrap}
+.bulkqr-payload{display:block; margin-top:4px; font-family:"IBM Plex Mono",monospace;
+  font-size:.76rem; color:var(--muted); word-break:break-all}
+.bulkqr-repeat{margin-top:5px; font-size:.78rem; font-weight:600; color:var(--red)}
+.bulkqr-skipped{margin-top:12px; font-size:.8rem; color:var(--muted)}
 
 /* ---------- result card ---------- */
 #result{margin-top:18px}
@@ -140,8 +191,10 @@ strong{font-weight:600}
 .sev-medium .r-ico{background:var(--amber-edge)}
 .sev-low .r-ico{background:#94a3b8}
 .sev-good .r-ico{background:var(--green-edge)}
-.r-title{font-weight:600}
-.r-detail{color:var(--muted); font-size:.86rem; margin-top:1px}
+/* ต้องเป็น block ทั้งคู่ ไม่งั้นหัวข้อกับคำอธิบายจะไหลต่อกันเป็นบรรทัดเดียวจนอ่านยาก
+   (เช่น "...ไม่ตรงQR ชำระเงินมาตรฐาน...") และ margin-top ของ .r-detail ก็ไม่มีผล */
+.r-title{display:block; font-weight:600}
+.r-detail{display:block; color:var(--muted); font-size:.86rem; margin-top:1px}
 
 /* technical details */
 details.tech{margin-top:8px}
@@ -184,7 +237,10 @@ details.tech>summary::-webkit-details-marker{display:none}
 }
 
 /* ---------- header nav (account/premium) ---------- */
-.header-inner{justify-content:space-between}
+/* แถบหัวใช้ความกว้างมากกว่าเนื้อหาได้ เพราะเนื้อหาถูกจำกัดที่ 680px เพื่อให้อ่านง่าย
+   แต่เมนูมี 5 ปุ่มซึ่งไม่มีทางพอในความกว้างเท่านั้น (จะตกบรรทัดตลอดแม้จอกว้าง) */
+.site-header .header-inner{max-width:1080px}
+.header-inner{justify-content:space-between; gap:16px}
 .nav-actions{display:flex; align-items:center; flex-wrap:wrap; justify-content:flex-end; gap:8px}
 .nav-actions .btn{padding:9px 16px; font-size:.88rem; height:auto}
 .nav-actions .btn.ghost{background:transparent; color:var(--ink)}
@@ -194,6 +250,12 @@ details.tech>summary::-webkit-details-marker{display:none}
 .nav-actions .nav-plan{font-size:.78rem; font-weight:700; padding:4px 9px; border-radius:7px;
   background:#eef2f9; color:var(--muted)}
 .nav-actions .nav-plan.is-premium{background:linear-gradient(160deg,#4a86f7,#2257c9); color:#fff}
+/* เมนูมีหลายปุ่ม (ตรวจลิงก์/ประวัติ/บัญชี/พรีเมียม/ออกจากระบบ) พอจอแคบลงจะเบียดกับ
+   คำโปรยใต้ชื่อแบรนด์ — ตัดคำโปรยออกก่อน เพราะเมนูสำคัญกว่าในการใช้งาน */
+@media (max-width:900px){
+  .brand-sub{display:none}
+  .nav-actions .btn{padding:8px 12px; font-size:.84rem}
+}
 
 /* ---------- forms (login/register/checkout) ---------- */
 .form-group{margin-bottom:14px}
@@ -241,12 +303,23 @@ details.tech>summary::-webkit-details-marker{display:none}
 .quota-bar{background:#eef2f9; border-radius:8px; height:9px; overflow:hidden; margin-top:8px}
 .quota-bar-fill{height:100%; background:var(--brand); border-radius:8px}
 .dash-grid{display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-top:16px}
+/* ช่องของ grid มี min-width:auto เป็นค่าเริ่มต้น ทำให้ไม่ยอมหดลงต่ำกว่าความกว้างของ
+   เนื้อหาข้างใน — เนื้อหา QR พร้อมเพย์เป็นข้อความยาวบรรทัดเดียวจึงดันทั้งหน้าให้เลื่อน
+   แนวนอนได้ ต้องใส่ min-width:0 เพื่อให้ ellipsis ของ .history-url ทำงานจริง */
+.dash-grid > *{min-width:0}
 @media (max-width:640px){.dash-grid{grid-template-columns:1fr}}
 .history-row{display:flex; align-items:center; gap:10px; padding:9px 0; border-top:1px solid rgba(31,42,68,.08);
   font-size:.85rem}
 .history-row:first-child{border-top:none}
 .history-url{flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
   font-family:"IBM Plex Mono",monospace}
+.history-thumb{flex:0 0 auto; width:34px; height:34px; border-radius:7px; object-fit:cover;
+  border:1px solid var(--line); background:#fff}
+.history-thumb.is-empty{display:grid; place-items:center; font-size:.6rem; font-weight:700;
+  color:var(--muted); background:#f0f3f9}
+.history-kind{display:inline-block; margin-right:6px; font-family:"IBM Plex Sans Thai",sans-serif;
+  font-size:.7rem; font-weight:700; color:var(--brand); background:#eaf0fd;
+  padding:1px 6px; border-radius:5px; vertical-align:1px}
 .history-badge{flex:0 0 auto; font-size:.72rem; font-weight:700; padding:3px 8px; border-radius:6px}
 .history-badge.green{background:var(--green-bg); color:var(--green)}
 .history-badge.yellow{background:var(--amber-bg); color:var(--amber)}

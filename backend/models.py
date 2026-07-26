@@ -96,6 +96,16 @@ class ScanHistory(db.Model):
     ran_deep_check = db.Column(db.Boolean, nullable=False, default=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow, index=True)
 
+    # ---- ข้อมูลเสริมสำหรับรายการที่มาจากการสแกน QR ----
+    source = db.Column(db.String(10), nullable=False, default="link")  # 'link' | 'qr'
+    qr_type = db.Column(db.String(20), nullable=True)   # url/promptpay/wifi/tel/... (ดู analyzer/qr_payload.py)
+    # ภาพย่อของ QR ที่สแกน เก็บเป็น data URI ขนาดเล็ก (ย่อจากฝั่งเบราว์เซอร์ก่อนส่งมาแล้ว)
+    # เก็บลง DB ตรง ๆ เพราะภาพเล็กมากและทำให้ไม่ต้องจัดการไฟล์แยก/สิทธิ์การเข้าถึงไฟล์
+    qr_thumb = db.Column(db.Text, nullable=True)
+
+    # ความยาวสูงสุดของ data URI ที่ยอมรับ (กันไม่ให้ client ยัดภาพใหญ่มาถ่วง DB)
+    MAX_THUMB_CHARS = 30_000
+
     def to_dict(self) -> dict:
         return {
             "url": self.url,
@@ -103,6 +113,9 @@ class ScanHistory(db.Model):
             "verdict_label": self.verdict_label,
             "ran_deep_check": self.ran_deep_check,
             "created_at": self.created_at.isoformat(),
+            "source": self.source or "link",
+            "qr_type": self.qr_type,
+            "qr_thumb": self.qr_thumb,
         }
 
 
