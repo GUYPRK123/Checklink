@@ -9,6 +9,20 @@ const ctx = canvas.getContext("2d", { willReadFrequently: true });
 const MAX_CODES_PER_IMAGE = 5;   // กันรูปพิเศษที่ทำให้วนหาไม่จบ
 const THUMB_SIZE = 128;          // ภาพย่อสำหรับเก็บลงประวัติ (เล็กพอที่จะใส่ DB ได้สบาย)
 
+/**
+ * jsQR ถูกโหลดด้วย <script> ธรรมดา (ไม่ใช่ ES module) จึงมาอยู่ที่ window.jsQR
+ * ถ้าไฟล์โหลดไม่ติด ค่านี้จะเป็น undefined แล้วโค้ดด้านล่างจะพังด้วยข้อความ
+ * "window.jsQR is not a function" ซึ่งผู้ใช้อ่านไม่รู้เรื่องและหาสาเหตุไม่ถูก
+ * จึงดักไว้ตรงนี้ให้บอกไปเลยว่าเกิดอะไรขึ้นและต้องทำอะไรต่อ
+ */
+function requireJsQR() {
+  if (typeof window.jsQR !== "function") {
+    throw new Error("โหลดตัวถอดรหัส QR (jsQR) ไม่สำเร็จ — ลองรีเฟรชหน้าเว็บอีกครั้ง " +
+                    "ถ้ายังไม่หาย แปลว่าไฟล์ js/vendor/jsQR.js หายไปจากเซิร์ฟเวอร์");
+  }
+  return window.jsQR;
+}
+
 function drawToCanvas(source, width, height) {
   canvas.width = width;
   canvas.height = height;
@@ -24,12 +38,13 @@ function drawToCanvas(source, width, height) {
  * กรณีที่ผู้ใช้เลือกผิดอันได้ง่าย และเป็นฐานของฟีเจอร์สแกนหลายอันพร้อมกัน
  */
 export function decodeAll(source, width, height) {
+  const jsQR = requireJsQR();
   if (!width || !height) return [];
   let imageData = drawToCanvas(source, width, height);
   const found = [];
 
   for (let i = 0; i < MAX_CODES_PER_IMAGE; i++) {
-    const code = window.jsQR(imageData.data, imageData.width, imageData.height);
+    const code = jsQR(imageData.data, imageData.width, imageData.height);
     if (!code || !code.data) break;
     found.push(code.data);
 

@@ -8,8 +8,12 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet" />
 <link rel="stylesheet" href="css/styles.css" />
-<!-- jsQR: ไลบรารีถอดรหัส QR Code ฝั่งเบราว์เซอร์ (อ่าน QR โดยไม่ต้องเปิดลิงก์) -->
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jsQR/1.4.0/jsQR.min.js"></script>
+<!-- jsQR: ไลบรารีถอดรหัส QR Code ฝั่งเบราว์เซอร์ (อ่าน QR โดยไม่ต้องเปิดลิงก์)
+     เก็บไว้ในโปรเจกต์เอง ไม่โหลดจาก CDN โดยตั้งใจ — ตัวถอด QR เป็นโค้ดที่อ่านเลขบัญชี
+     พร้อมเพย์ ถ้าดึงจาก CDN แล้ว CDN ถูกแทรกโค้ด/DNS ถูกดัก ผู้โจมตีจะคุมผลการถอดได้
+     การเก็บเองยังทำให้ CSP เป็น script-src 'self' ล้วนได้ด้วย (ดู _security_headers ใน app.py)
+     ที่มา: npm jsqr@1.4.0 -> dist/jsQR.js (Apache-2.0, ดู vendor/jsQR-LICENSE.txt) -->
+<script src="js/vendor/jsQR.js"></script>
 </head>
 <body>
   <header class="site-header">

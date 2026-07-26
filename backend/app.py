@@ -37,7 +37,10 @@ def _security_headers(response):
     response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
     response.headers["Content-Security-Policy"] = (
         "default-src 'self'; "
-        "script-src 'self' https://cdnjs.cloudflare.com; "
+        # script-src เป็น 'self' ล้วน: จาวาสคริปต์ทุกตัวรวมทั้ง jsQR ถูกเสิร์ฟจากเครื่องนี้เอง
+        # (frontend/js/vendor/) ห้ามเติมโดเมน CDN กลับเข้ามา — ตัวถอด QR อ่านเลขบัญชีพร้อมเพย์
+        # ถ้า CDN ถูกแทรกโค้ดเมื่อไหร่ ผลการถอดจะถูกคุมได้ทันที
+        "script-src 'self'; "
         "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
         "font-src 'self' https://fonts.gstatic.com; "
         "img-src 'self' data:; "

@@ -57,6 +57,9 @@ export function mountBulkQrChecker(panel, maxItems, onDone) {
 
     const items = [];
     const emptyFiles = [];
+    // ถ้าตัวถอดรหัสเองใช้ไม่ได้ (เช่น jsQR โหลดไม่ติด) ทุกไฟล์จะพังเหมือนกันหมด
+    // ต้องแยกจากกรณี "รูปไม่ชัด" ไม่งั้นจะไปโทษรูปของผู้ใช้ทั้งที่ปัญหาอยู่ที่ระบบ
+    let decoderError = null;
     for (const file of files) {
       try {
         const { codes, thumb } = await decodeFile(file);
@@ -66,13 +69,16 @@ export function mountBulkQrChecker(panel, maxItems, onDone) {
           thumb: i === 0 ? thumb : null,   // เก็บภาพย่อจากไฟล์ละครั้งเดียวพอ
           name: codes.length > 1 ? `${file.name} (QR อันที่ ${i + 1})` : file.name,
         }));
-      } catch {
+      } catch (err) {
+        decoderError = decoderError || err;
         emptyFiles.push(file.name);
       }
     }
 
     if (!items.length) {
-      setStatus("อ่าน QR ไม่ได้เลยสักรูป — ลองใช้รูปที่ QR ชัดและเต็มกรอบกว่านี้", "warn");
+      setStatus(decoderError
+        ? (decoderError.message || "อ่าน QR ไม่ได้")
+        : "อ่าน QR ไม่ได้เลยสักรูป — ลองใช้รูปที่ QR ชัดและเต็มกรอบกว่านี้", "warn");
       return;
     }
     if (items.length > maxItems) {

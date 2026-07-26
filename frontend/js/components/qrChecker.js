@@ -142,16 +142,25 @@ export function mountQrChecker(panel, resultEl) {
     }
   }
 
+  // ต้องมี try/catch: ฟังก์ชันนี้ถูกเรียกจาก requestAnimationFrame ถ้ามีอะไร throw ออกมา
+  // จะไม่มีใครรับ ลูปสแกนหยุดเงียบ ๆ แล้วสถานะค้างที่ "กำลังเปิดกล้อง..." ตลอดไป
+  // โดยที่ผู้ใช้ไม่รู้ว่าพัง (เคยเกิดจริงตอน jsQR โหลดไม่ติด)
   function tick() {
     if (!stream) return;
-    if (video.readyState === video.HAVE_ENOUGH_DATA) {
-      const codes = decodeAll(video, video.videoWidth, video.videoHeight);
-      if (codes.length) {
-        const thumb = makeThumb(video, video.videoWidth, video.videoHeight);
-        stopCamera();
-        handleCodes(codes, thumb);
-        return;
+    try {
+      if (video.readyState === video.HAVE_ENOUGH_DATA) {
+        const codes = decodeAll(video, video.videoWidth, video.videoHeight);
+        if (codes.length) {
+          const thumb = makeThumb(video, video.videoWidth, video.videoHeight);
+          stopCamera();
+          handleCodes(codes, thumb);
+          return;
+        }
       }
+    } catch (err) {
+      stopCamera();
+      setStatus(err.message || "อ่าน QR จากกล้องไม่ได้", "warn");
+      return;
     }
     rafId = requestAnimationFrame(tick);
   }
