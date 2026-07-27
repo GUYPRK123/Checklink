@@ -1,0 +1,138 @@
+# -*- coding: utf-8 -*-
+"""
+test_heuristics.py — เทสต์ชั้นที่ 2 ของ cascade (วิเคราะห์รูปแบบ URL สด)
+
+นี่คือชั้นเดียวที่จับ "ลิงก์ใหม่ที่ยังไม่มีใครรายงาน" ได้ จึงเป็นส่วนที่พังแล้วเจ็บที่สุด
+สิ่งที่เทสต์ชุดนี้กันไว้คือ 2 ความผิดพลาดคนละทิศ:
+  - false negative: เว็บหลอกเลียนแบบแบรนด์แล้วไม่ถูกจับ (อันตรายกับผู้ใช้)
+  - false positive: โดเมนทางการโดนตีว่าปลอม (ผู้ใช้เลิกเชื่อระบบ)
+"""
+from analyzer.url_parser import parse_url
+from analyzer.heuristics import analyze, levenshtein, normalize_glyphs
+
+
+def signal_ids(url: str) -> set:
+    """ยิงลิงก์เข้าไปหนึ่งอัน คืนเซ็ตของ id สัญญาณที่จับได้ — ใช้ช่วยให้เทสต์อ่านง่าย"""
+    return {s["id"] for s in analyze(parse_url(url))["signals"]}
+
+
+class TestLevenshtein:
+    def test_เหมือนกันเป๊ะได้ศูนย์(self):
+        assert levenshtein("google", "google") == 0
+
+    def test_ต่างหนึ่งตัว(self):
+        assert levenshtein("gogle", "google") == 1     # ขาดตัวอักษร
+        assert levenshtein("googlee", "google") == 1   # เกินตัวอักษร
+        assert levenshtein("goggle", "google") == 1    # สลับตัวอักษร
+
+    def test_สตริงว่าง(self):
+        assert levenshtein("", "abc") == 3
+        assert levenshtein("abc", "") == 3
+        assert levenshtein("", "") == 0
+
+
+class TestNormalizeGlyphs:
+    def test_ตัวเลขที่หน้าตาเหมือนตัวอักษร(self):
+        assert normalize_glyphs("g00gle") == "google"
+        assert normalize_glyphs("paypa1") == "paypal"
+        assert normalize_glyphs("micr0s0ft") == "microsoft"
+
+    def test_คู่ตัวอักษรที่รวมกันแล้วดูเป็นตัวเดียว(self):
+        assert normalize_glyphs("rnicrosoft") == "microsoft"   # rn -> m
+        assert normalize_glyphs("vvallet") == "wallet"         # vv -> w
+
+    def test_แปลงเป็นตัวเล็กเสมอ(self):
+        assert normalize_glyphs("GOOGLE") == "google"
+
+
+class Testโดเมนทางการต้องไม่โดนตีว่าปลอม:
+    def test_โดเมนแบรนด์ตรงเป๊ะได้ปลอดภัย(self):
+        result = analyze(parse_url("https://www.google.com/search?q=a"))
+        assert result["verified_safe"] is True
+        assert result["legit_brand"] == "google"
+        assert result["score"] == 0
+
+    def test_โดเมนแบรนด์แบบไทย(self):
+        result = analyze(parse_url("https://shopee.co.th/mall"))
+        assert result["verified_safe"] is True
+        assert result["legit_brand"] == "shopee"
+
+    def test_ปลอดภัยแล้วต้องลัดออกทันทีไม่เก็บสัญญาณลบ(self):
+        """แม้ลิงก์จะยาวหรือมีคำล่อ ถ้าโดเมนเป็นของทางการต้องไม่มีสัญญาณเสี่ยงติดมา"""
+        result = analyze(parse_url("https://www.google.com/verify-account-urgent-" + "x" * 80))
+        assert result["verified_safe"] is True
+        assert [s["id"] for s in result["signals"]] == ["verified_brand"]
+
+
+class Testจับการเลียนแบบแบรนด์:
+    def test_ชื่อแบรนด์อยู่ในลิงก์แต่โดเมนไม่ใช่ของแบรนด์(self):
+        result = analyze(parse_url("https://secure-facebook-login.xyz/"))
+        assert "brand_impersonation" in {s["id"] for s in result["signals"]}
+        assert result["verified_safe"] is False
+
+    def test_แบรนด์เป็นsubdomainของเว็บอื่น(self):
+        assert "brand_impersonation" in signal_ids("https://google.com.login.evil.xyz/")
+
+    def test_typosquattingสะกดผิดหนึ่งตัว(self):
+        assert "typosquatting" in signal_ids("https://gooogle.com/")
+
+    def test_typosquattingซ่อนแบรนด์ด้วยเลข(self):
+        """g00gle / micr0s0ft — จับได้จากการ normalize glyph ก่อนเทียบ"""
+        assert "typosquatting" in signal_ids("https://g00gle.com/")
+        assert "typosquatting" in signal_ids("https://paypa1.com/")
+
+
+class Testสัญญาณเสี่ยงรายข้อ:
+    def test_ใช้เลขipแทนชื่อเว็บ(self):
+        assert "ip_host" in signal_ids("http://203.0.113.10/login.php")
+
+    def test_ซ่อนปลายทางด้วยat(self):
+        assert "userinfo_at" in signal_ids("http://www.paypal.com@evil.xyz/")
+
+    def test_punycode(self):
+        assert "punycode" in signal_ids("https://xn--80ak6aa92e.com/")
+
+    def test_นามสกุลเสี่ยง(self):
+        assert "risky_tld" in signal_ids("https://freegift.tk/")
+
+    def test_subdomainซ้อนหลายชั้น(self):
+        assert "deep_subdomain" in signal_ids("https://a.b.c.d.example.org/")
+
+    def test_ลิงก์ย่อ(self):
+        assert "shortener" in signal_ids("https://bit.ly/3xYz")
+
+    def test_คำล่อให้กด(self):
+        ids = signal_ids("https://unknown-site.org/verify-account-suspended/")
+        assert "lure_keyword" in ids
+
+    def test_ขีดหลายตัวในชื่อโดเมน(self):
+        assert "many_hyphens" in signal_ids("https://secure-login-verify.org/")
+
+    def test_ไม่ใช่https(self):
+        assert "no_https" in signal_ids("http://example.org/")
+
+    def test_httpsไม่ติดสัญญาณnohttps(self):
+        assert "no_https" not in signal_ids("https://example.org/")
+
+    def test_พอร์ตแปลก(self):
+        assert "weird_port" in signal_ids("http://example.org:8888/")
+        assert "weird_port" not in signal_ids("http://example.org:80/")
+
+    def test_ลิงก์ยาวผิดปกติ(self):
+        assert "long_url" in signal_ids("https://example.org/" + "a" * 100)
+
+
+class Testการรวมคะแนน:
+    def test_คะแนนเท่ากับผลรวมของสัญญาณ(self):
+        result = analyze(parse_url("http://paypal-secure-verify.tk@1.2.3.4/urgent"))
+        assert result["score"] == sum(s["points"] for s in result["signals"])
+
+    def test_ลิงก์หลอกครบเครื่องต้องได้คะแนนสูง(self):
+        """RED_SCORE = 6 — ลิงก์แบบนี้ต้องทะลุเกณฑ์แดงไปไกล"""
+        result = analyze(parse_url("http://secure-paypal-verify-login.tk/account-suspended"))
+        assert result["score"] >= 6
+
+    def test_โดเมนธรรมดาที่ไม่รู้จักต้องไม่ได้คะแนนสูง(self):
+        """เว็บทั่วไปที่ระบบไม่รู้จักควรลงเอยเป็น "เหลือง" ไม่ใช่ "แดง" """
+        result = analyze(parse_url("https://somerandomblog.org/article/1"))
+        assert result["score"] < 6

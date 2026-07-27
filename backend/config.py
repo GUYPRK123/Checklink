@@ -31,8 +31,20 @@ class Config:
         "DATABASE_URL", f"sqlite:///{os.path.join(basedir, 'instance', 'app.db')}")
     SQLALCHEMY_TRACK_MODIFICATIONS = False
 
-    # origin ที่อนุญาตให้เรียก API ข้าม origin ได้ (คั่นด้วย ,) — "*" เฉพาะตอน dev เท่านั้น
-    CORS_ORIGINS = os.environ.get("CORS_ORIGINS", "*")
+    # origin ที่อนุญาตให้เรียก API ข้าม origin ได้ (คั่นด้วย ,)
+    # ค่าเริ่มต้นต่างกันตามโหมด และตั้งใจให้ต่างกัน:
+    #   development -> "*"  สะดวกตอนเปิดหน้าเว็บจาก live-server/พอร์ตอื่นระหว่างพัฒนา
+    #   production  -> ""   = ไม่เปิด CORS เลย (same-origin เท่านั้น)
+    # เหตุผล: แอปนี้เสิร์ฟ frontend จาก Flask ตัวเดียวกันอยู่แล้วจึงไม่ต้องใช้ CORS
+    # และ CORS เปิดกว้าง ("*") คู่กับ supports_credentials=True คือช่องให้เว็บอื่นยิง API
+    # แทนผู้ใช้ที่ล็อกอินค้างไว้ได้ (ดู app.py ตอนเรียก CORS())
+    CORS_ORIGINS = os.environ.get("CORS_ORIGINS", "" if ENV == "production" else "*")
+
+    # ที่เก็บตัวนับของ Flask-Limiter — "memory://" คือนับในหน่วยความจำของ process นั้น ๆ
+    # ใช้ได้ดีกับการรันแบบปัจจุบัน (waitress process เดียว หลาย thread) แต่ถ้าวันไหน
+    # รันหลาย process/หลายเครื่อง ตัวนับจะแยกกันคนละชุด ทำให้ลิมิตหลวมเป็นจำนวนเท่าของ
+    # process -> ตอนนั้นให้ตั้ง RATELIMIT_STORAGE_URI เป็น redis://... แทน
+    RATELIMIT_STORAGE_URI = os.environ.get("RATELIMIT_STORAGE_URI", "memory://")
 
     # true เฉพาะตอนมี Nginx (หรือ reverse proxy อื่น) อยู่หน้า waitress บนเครื่องเดียวกัน
     # เท่านั้น (ดู deploy/) เพื่อให้ IP ผู้ใช้จริง/https ถูกอ่านถูกจาก X-Forwarded-*
@@ -51,3 +63,7 @@ class Config:
     PREMIUM_PRICE_THB = int(os.environ.get("PREMIUM_PRICE_THB", "99"))
     PREMIUM_DURATION_DAYS = int(os.environ.get("PREMIUM_DURATION_DAYS", "30"))
     BULK_CHECK_MAX_URLS = int(os.environ.get("BULK_CHECK_MAX_URLS", "20"))
+
+    # จำนวนลิงก์ที่ยิงตรวจพร้อมกันในโหมด bulk (งานนี้รอเน็ตเป็นหลัก ไม่กิน CPU)
+    # อย่าตั้งสูงเกินไป เพราะแต่ละลิงก์เปิดหลาย connection ในชั้นที่ 4 อยู่แล้ว
+    BULK_CHECK_WORKERS = int(os.environ.get("BULK_CHECK_WORKERS", "5"))

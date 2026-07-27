@@ -14,6 +14,7 @@ SameSite=Lax cookie + rate limit อยู่แล้ว
 """
 import csv
 import io
+from concurrent.futures import ThreadPoolExecutor
 
 from flask import Blueprint, request, jsonify, current_app, Response
 from flask_login import current_user
@@ -267,33 +268,56 @@ def api_check_bulk():
     if len(urls) > max_urls:
         return jsonify({"ok": False, "error": f"เช็คได้ครั้งละไม่เกิน {max_urls} ลิงก์"}), 400
 
-    results = []
-    for u in urls:
-        r = scan(u, run_deep=True)
-        _save_history(user, r, True)
-        results.append(r)
+    # ยิงตรวจพร้อมกันหลายลิงก์: งานนี้ "รอเน็ต" เป็นหลัก (DNS/redirect/SSL/โหลดหน้าเว็บ)
+    # ไม่ได้กิน CPU การรอเรียงทีละลิงก์จึงกินเวลาเท่าผลรวมของทุกลิงก์ และบล็อก worker
+    # ของ waitress ไว้ทั้งเส้น -> 20 ลิงก์เคยใช้เวลาระดับนาที
+    #
+    # ทำเฉพาะ scan() แบบขนาน ส่วนการเขียนประวัติลง DB ทำต่อในเธรดหลักตามลำดับเดิม
+    # เพราะ db.session ของ Flask-SQLAlchemy ผูกกับ app context ของเธรดที่เรียก
+    # ห้ามใช้ข้าม thread (executor.map คืนผลตามลำดับ input เสมอ ลำดับจึงไม่สลับ)
+    workers = max(1, min(current_app.config["BULK_CHECK_WORKERS"], len(urls)))
+    # ดึง logger ออกมาเก็บไว้ก่อน: ในเธรดลูกไม่มี app context จึงแตะ current_app ไม่ได้
+    logger = current_app.logger
+
+    def _scan_one(u: str) -> dict:
+        try:
+            return scan(u, run_deep=True)
+        except Exception as exc:  # ลิงก์เดียวพังต้องไม่ทำให้ทั้งชุดพัง
+            logger.exception("bulk scan ล้มเหลวที่ลิงก์ %s", u)
+            return {"ok": False, "input": u,
+                    "error": f"ตรวจลิงก์นี้ไม่สำเร็จ ({type(exc).__name__})"}
+
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        results = list(pool.map(_scan_one, urls))
+
+    for r in results:
+        _save_history(user, r, True)  # ข้ามรายการที่ ok=False ให้เองอยู่แล้ว
 
     return jsonify({"ok": True, "results": results})
 
 
 @check_bp.route("/history", methods=["GET"])
 def api_history():
-    if not current_user.is_authenticated:
+    # รองรับทั้ง session login และ API key ให้ตรงกับ /api/check — เดิมรับแต่ session
+    # ทำให้ client ที่ถือ API key ตรวจลิงก์ได้แต่ดึงประวัติของตัวเองไม่ได้
+    user, _ = _current_actor()
+    if user is None:
         return jsonify({"ok": False, "error": "กรุณาล็อกอินก่อน"}), 401
     page_size = 50
-    rows = (current_user.history.order_by(ScanHistory.created_at.desc())
+    rows = (user.history.order_by(ScanHistory.created_at.desc())
             .limit(page_size).all())
     return jsonify({"ok": True, "history": [r.to_dict() for r in rows]})
 
 
 @check_bp.route("/history/export", methods=["GET"])
 def api_history_export():
-    if not current_user.is_authenticated:
+    user, _ = _current_actor()
+    if user is None:
         return jsonify({"ok": False, "error": "กรุณาล็อกอินก่อน"}), 401
-    if not current_user.is_premium:
+    if not user.is_premium:
         return jsonify({"ok": False, "error": "การ export ประวัติใช้ได้เฉพาะสมาชิกพรีเมียม"}), 403
 
-    rows = current_user.history.order_by(ScanHistory.created_at.desc()).all()
+    rows = user.history.order_by(ScanHistory.created_at.desc()).all()
     buf = io.StringIO()
     writer = csv.writer(buf)
     # ไม่ใส่ qr_thumb ลง CSV เพราะเป็นรูป base64 ยาวมาก เปิดใน Excel แล้วอ่านไม่รู้เรื่อง

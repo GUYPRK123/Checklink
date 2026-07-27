@@ -14,6 +14,8 @@ from flask_limiter.util import get_remote_address
 db = SQLAlchemy()
 login_manager = LoginManager()
 csrf = CSRFProtect()
+# ที่เก็บตัวนับของ limiter ตั้งผ่าน Config.RATELIMIT_STORAGE_URI (init_app อ่านจาก app.config)
+# ค่าเริ่มต้นคือ memory:// — ดูข้อจำกัดและวิธีเปลี่ยนไปใช้ redis ได้ที่คอมเมนต์ใน config.py
 limiter = Limiter(key_func=get_remote_address, default_limits=[])
 
 login_manager.login_view = None  # API-only: ไม่ redirect ไปหน้า login, คืน 401 แทน

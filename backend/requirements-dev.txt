@@ -1,0 +1,5 @@
+# เครื่องมือสำหรับตอนพัฒนา/เทสต์เท่านั้น ไม่ต้องติดตั้งบนเครื่อง production
+# ติดตั้ง:  pip install -r requirements-dev.txt
+-r requirements.txt
+
+pytest>=8.0

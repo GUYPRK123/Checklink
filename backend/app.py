@@ -101,9 +101,20 @@ def create_app() -> Flask:
         # (ห้ามเปิดถ้า waitress เปิดสู่อินเทอร์เน็ตตรง ๆ เพราะ header นี้ปลอมได้)
         app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1)
 
-    origins = app.config["CORS_ORIGINS"]
-    cors_origins = "*" if origins == "*" else [o.strip() for o in origins.split(",") if o.strip()]
-    CORS(app, supports_credentials=True, origins=cors_origins)
+    # CORS: เปิดเฉพาะเมื่อมีการระบุ origin ไว้จริง ๆ เท่านั้น
+    # ถ้า CORS_ORIGINS ว่าง (ค่าเริ่มต้นของ production) จะไม่ติดตั้ง CORS เลย = same-origin
+    # อย่างเดียว ซึ่งพอสำหรับการใช้งานปกติ เพราะ Flask ตัวนี้เสิร์ฟ frontend เองอยู่แล้ว
+    origins = (app.config["CORS_ORIGINS"] or "").strip()
+    if origins == "*":
+        if not app.config["DEBUG"]:
+            # "*" + supports_credentials=True = เว็บใดก็ได้ยิง API แทนผู้ใช้ที่ล็อกอินค้างได้
+            raise RuntimeError(
+                'ห้ามตั้ง CORS_ORIGINS="*" ตอน production — ให้ระบุ origin จริง เช่น '
+                'CORS_ORIGINS=http://198.199.122.176:5000 (ดู .env.example)')
+        CORS(app, supports_credentials=True, origins="*")
+    elif origins:
+        CORS(app, supports_credentials=True,
+             origins=[o.strip() for o in origins.split(",") if o.strip()])
 
     db.init_app(app)
     login_manager.init_app(app)
