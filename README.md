@@ -67,46 +67,31 @@ python app.py
 
 ### ตอนใช้งานจริง (production)
 
-ถ้ามีไฟล์ `.env` ครบแล้ว รันสั้นๆ ได้เลย:
+**วิธีปกติคือปล่อยให้ systemd ดูแล** (ดูหัวข้อ [Deploy](#deploy-nginx--systemd)) — เว็บจริง
+อยู่ที่ **https://checkurl.studiodup.com**
+
+ถ้าต้องรันมือ (เช่นตอนไล่ปัญหา) ให้หยุด service ก่อนแล้วสั่ง:
 
 ```bash
 cd backend && source .venv/bin/activate
-waitress-serve --host=0.0.0.0 --port=5000 --threads=16 app:app
+python serve.py
 ```
 
-เปิดเว็บที่ **https://checkurl.studiodup.com** (ระหว่างยังไม่มี HTTPS ใช้ http://198.199.122.176:5000)
+`serve.py` อ่านค่าทั้งหมดจาก `.env` แล้วตั้ง waitress ให้ถูกต้องสำหรับการอยู่หลัง Nginx
+(ผูก `127.0.0.1`, 16 threads, `trusted_proxy` เพื่อให้เห็น IP ผู้ใช้จริง) — **อย่าสั่ง
+`waitress-serve` ตรง ๆ** เพราะจะได้ค่าเริ่มต้นที่ลบ header `X-Forwarded-*` ทิ้ง ทำให้
+rate limit เห็นผู้ใช้ทุกคนเป็น 127.0.0.1 คนเดียวกัน (เหตุผลเต็มอยู่ในหัวไฟล์ `serve.py`)
 
-ถ้าไม่ใช้ `.env` ก็ส่งค่าผ่าน env ตอนรันได้:
-
-```bash
-cd backend && source .venv/bin/activate
-FLASK_ENV=production \
-SECRET_KEY='ค่าคงที่ที่สุ่มมาครั้งเดียว' \
-CORS_ORIGINS="http://198.199.122.176:5000" \
-SESSION_COOKIE_SECURE=false \
-waitress-serve --host=0.0.0.0 --port=5000 --threads=16 app:app
-```
-
-### รันค้างไว้แม้ปิด SSH
-
-**วิธีที่แนะนำ:** ติดตั้งเป็น systemd service (ขึ้นเองหลังรีบูต + รีสตาร์ทให้เมื่อ process ตาย)
-ดูขั้นตอนในหัวข้อ [Deploy](#deploy-nginx--systemd) ด้านล่าง
-
-**วิธีชั่วคราว (nohup):**
-
-```bash
-cd backend && source .venv/bin/activate
-nohup waitress-serve --host=0.0.0.0 --port=5000 --threads=16 app:app > ../../app.log 2>&1 &
-tail -f ../../app.log      # ดู log
-```
+ปรับค่าได้ผ่าน env: `BIND_HOST`, `BIND_PORT`, `WAITRESS_THREADS`, `TRUSTED_PROXY`
 
 ### คำสั่งที่ใช้บ่อย
 
 | งาน | คำสั่ง |
 |---|---|
-| เช็กว่ารันอยู่ไหม | `ss -tlnp \| grep 5000` |
-| หยุด (รันอยู่หน้า terminal) | `Ctrl+C` |
-| หยุด (รันเบื้องหลัง/หา terminal ไม่เจอ) | `pkill -f waitress-serve` |
+| ดูสถานะ | `systemctl status phishing-checker` |
+| รีสตาร์ท (หลังแก้โค้ด/`.env`) | `sudo systemctl restart phishing-checker` |
+| ดู log สด | `journalctl -u phishing-checker -f` |
+| เช็กว่ารันอยู่ไหม | `ss -tlnp \| grep 5000` (ต้องเห็น `127.0.0.1:5000`) |
 | รันเทสต์ | `cd backend && ./.venv/bin/python -m pytest` |
 
 ---

@@ -43,11 +43,13 @@ WorkingDirectory=/home/url/checkurl-app/Checklink/backend
 # ⚠️ ผูกกับ 127.0.0.1 ไม่ใช่ 0.0.0.0 — ตั้งใจให้เข้าถึงได้ผ่าน Nginx เท่านั้น
 # (ดู deploy/nginx.conf) ถ้ายังไม่ได้ตั้ง Nginx และต้องการเข้าตรงด้วย IP ชั่วคราว
 # ให้เปลี่ยนเป็น --host=0.0.0.0 และอย่าลืมตั้ง BEHIND_PROXY=false ใน .env
-# --threads=16: ค่าเริ่มต้นของ waitress คือ 4 ซึ่งน้อยไปสำหรับงานนี้ การตรวจเชิงลึก
-# 1 ครั้งใช้เวลา 0.3-4 วินาทีโดยเป็นการ "รอเน็ต" แทบทั้งหมด (ไม่กิน CPU) 4 threads จึง
-# แปลว่ารับได้แค่ราว 2 คน/วินาที thread ที่นั่งรอเน็ตอยู่เฉย ๆ กินทรัพยากรน้อยมาก
-ExecStart=/home/url/checkurl-app/Checklink/backend/.venv/bin/waitress-serve \
-          --host=127.0.0.1 --port=5000 --threads=16 app:app
+# ใช้ serve.py แทนคำสั่ง waitress-serve เพราะต้องตั้ง trusted_proxy ให้ waitress
+# ยอมรับ header X-Forwarded-* จาก Nginx (ไม่งั้น rate limit จะเห็นทุกคนเป็น 127.0.0.1
+# และไม่ส่ง HSTS) ค่านั้นเป็นรายการคั่นด้วยช่องว่างซึ่งเขียนใน ExecStart แล้วเสี่ยงพัง
+# เรื่องเครื่องหมายคำพูด — เหตุผลเต็มอยู่ในหัวไฟล์ backend/serve.py
+#
+# ตั้งค่าเพิ่มเติมได้ผ่าน .env: BIND_HOST, BIND_PORT, WAITRESS_THREADS, TRUSTED_PROXY
+ExecStart=/home/url/checkurl-app/Checklink/backend/.venv/bin/python serve.py
 
 Restart=always
 RestartSec=3
