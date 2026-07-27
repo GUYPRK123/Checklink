@@ -19,9 +19,10 @@ from concurrent.futures import ThreadPoolExecutor
 from flask import Blueprint, request, jsonify, current_app, Response
 from flask_login import current_user
 
+import jobs
 from extensions import db, limiter
-from models import ApiKey, ScanHistory
-from analyzer import scan
+from models import ApiKey, ScanHistory, User
+from analyzer import scan, scan_cache
 from analyzer.qr_payload import classify as classify_qr
 
 check_bp = Blueprint("check", __name__, url_prefix="/api")
@@ -220,13 +221,32 @@ def api_check_qr():
     return jsonify(_analyze_qr_payload(payload, user, thumb=thumb))
 
 
+def _premium_gate(error_message: str):
+    """ด่านเดียวกันของทุก endpoint แบบ bulk คืน (user, error_response)"""
+    user, _ = _current_actor()
+    if user is None or not user.is_premium:
+        return None, (jsonify({"ok": False, "error": error_message}), 403)
+    return user, None
+
+
+def _accepted(job_id: str, total: int):
+    """ตอบกลับแบบเดียวกันของทุกงาน bulk: รับงานแล้ว ไปถามความคืบหน้าที่ poll_url"""
+    return jsonify({
+        "ok": True, "job_id": job_id, "total": total, "state": "queued",
+        "poll_url": f"/api/check/bulk/{job_id}",
+    }), 202
+
+
 @check_bp.route("/check/qr/bulk", methods=["POST"])
 @limiter.limit("5 per minute")
 def api_check_qr_bulk():
-    """ตรวจ QR หลายอันพร้อมกัน (พรีเมียมเท่านั้น) — เบราว์เซอร์ถอดหลายรูป/หลาย QR มาให้แล้ว"""
-    user, _ = _current_actor()
-    if user is None or not user.is_premium:
-        return jsonify({"ok": False, "error": "การสแกน QR หลายอันพร้อมกันใช้ได้เฉพาะสมาชิกพรีเมียม"}), 403
+    """ตรวจ QR หลายอันพร้อมกัน (พรีเมียมเท่านั้น) — เบราว์เซอร์ถอดหลายรูป/หลาย QR มาให้แล้ว
+
+    ตอบ 202 + job_id ทันที แล้วให้หน้าเว็บถามความคืบหน้าที่ /api/check/bulk/<job_id>
+    """
+    user, err = _premium_gate("การสแกน QR หลายอันพร้อมกันใช้ได้เฉพาะสมาชิกพรีเมียม")
+    if err:
+        return err
 
     data = request.get_json(silent=True) or {}
     items = data.get("items") or []
@@ -236,29 +256,50 @@ def api_check_qr_bulk():
     if len(items) > max_items:
         return jsonify({"ok": False, "error": f"ตรวจได้ครั้งละไม่เกิน {max_items} รายการ"}), 400
 
-    results = []
+    # แกะข้อมูลที่ต้องใช้ออกมาให้ครบตั้งแต่ตอนนี้ เพราะในเธรดเบื้องหลังไม่มี request แล้ว
+    prepared = []
     for item in items:
         if not isinstance(item, dict):
             continue
         payload = (item.get("payload") or "").strip()
         if not payload:
             continue
-        results.append({
-            "name": str(item.get("name") or "")[:120],
-            **_analyze_qr_payload(payload, user, thumb=_clean_thumb(item.get("thumb"))),
-        })
-
-    if not results:
+        prepared.append({"name": str(item.get("name") or "")[:120], "payload": payload,
+                         "thumb": _clean_thumb(item.get("thumb"))})
+    if not prepared:
         return jsonify({"ok": False, "error": "ไม่พบเนื้อหา QR ที่ใช้ตรวจได้ในรายการที่ส่งมา"}), 400
-    return jsonify({"ok": True, "results": results})
+
+    user_id = user.id
+
+    def work(report):
+        # โหลด user ใหม่ในเธรดนี้ ไม่ส่ง object ข้ามเธรดเพราะผูกกับ session ของเธรดเดิม
+        job_user = db.session.get(User, user_id)
+        results = []
+        for item in prepared:
+            # ทำทีละอันตามลำดับ ไม่ขนาน เพราะ _analyze_qr_payload เขียนประวัติลง DB
+            # ระหว่างทาง ซึ่ง session ของ SQLAlchemy ใช้ข้ามเธรดไม่ได้
+            results.append({
+                "name": item["name"],
+                **_analyze_qr_payload(item["payload"], job_user, thumb=item["thumb"]),
+            })
+            report()
+        return results
+
+    job_id = jobs.submit(current_app._get_current_object(), user_id, len(prepared), work)
+    return _accepted(job_id, len(prepared))
 
 
 @check_bp.route("/check/bulk", methods=["POST"])
 @limiter.limit("5 per minute")
 def api_check_bulk():
-    user, _ = _current_actor()
-    if user is None or not user.is_premium:
-        return jsonify({"ok": False, "error": "ฟีเจอร์เช็คแบบ bulk ใช้ได้เฉพาะสมาชิกพรีเมียม"}), 403
+    """ตรวจหลายลิงก์พร้อมกัน (พรีเมียมเท่านั้น) — ตอบ 202 + job_id ทันที
+
+    เดิม endpoint นี้ตรวจให้จบก่อนแล้วค่อยตอบ ซึ่งยึด worker thread ของ waitress ไว้
+    ได้นานถึงราว 8 วินาที ทำให้คนอื่นทั้งเว็บรอตาม ตอนนี้งานย้ายไปทำเบื้องหลัง (jobs.py)
+    """
+    user, err = _premium_gate("ฟีเจอร์เช็คแบบ bulk ใช้ได้เฉพาะสมาชิกพรีเมียม")
+    if err:
+        return err
 
     data = request.get_json(silent=True) or {}
     urls = [u.strip() for u in (data.get("urls") or []) if isinstance(u, str) and u.strip()]
@@ -268,32 +309,54 @@ def api_check_bulk():
     if len(urls) > max_urls:
         return jsonify({"ok": False, "error": f"เช็คได้ครั้งละไม่เกิน {max_urls} ลิงก์"}), 400
 
-    # ยิงตรวจพร้อมกันหลายลิงก์: งานนี้ "รอเน็ต" เป็นหลัก (DNS/redirect/SSL/โหลดหน้าเว็บ)
-    # ไม่ได้กิน CPU การรอเรียงทีละลิงก์จึงกินเวลาเท่าผลรวมของทุกลิงก์ และบล็อก worker
-    # ของ waitress ไว้ทั้งเส้น -> 20 ลิงก์เคยใช้เวลาระดับนาที
-    #
-    # ทำเฉพาะ scan() แบบขนาน ส่วนการเขียนประวัติลง DB ทำต่อในเธรดหลักตามลำดับเดิม
-    # เพราะ db.session ของ Flask-SQLAlchemy ผูกกับ app context ของเธรดที่เรียก
-    # ห้ามใช้ข้าม thread (executor.map คืนผลตามลำดับ input เสมอ ลำดับจึงไม่สลับ)
     workers = max(1, min(current_app.config["BULK_CHECK_WORKERS"], len(urls)))
-    # ดึง logger ออกมาเก็บไว้ก่อน: ในเธรดลูกไม่มี app context จึงแตะ current_app ไม่ได้
     logger = current_app.logger
+    user_id = user.id
 
-    def _scan_one(u: str) -> dict:
-        try:
-            return scan(u, run_deep=True)
-        except Exception as exc:  # ลิงก์เดียวพังต้องไม่ทำให้ทั้งชุดพัง
-            logger.exception("bulk scan ล้มเหลวที่ลิงก์ %s", u)
-            return {"ok": False, "input": u,
-                    "error": f"ตรวจลิงก์นี้ไม่สำเร็จ ({type(exc).__name__})"}
+    def work(report):
+        def scan_one(u: str) -> dict:
+            try:
+                return scan(u, run_deep=True)
+            except Exception as exc:  # ลิงก์เดียวพังต้องไม่ทำให้ทั้งชุดพัง
+                logger.exception("bulk scan ล้มเหลวที่ลิงก์ %s", u)
+                return {"ok": False, "input": u,
+                        "error": f"ตรวจลิงก์นี้ไม่สำเร็จ ({type(exc).__name__})"}
+            finally:
+                report()
 
-    with ThreadPoolExecutor(max_workers=workers) as pool:
-        results = list(pool.map(_scan_one, urls))
+        # ยิงตรวจพร้อมกัน: งานนี้ "รอเน็ต" เป็นหลัก (DNS/redirect/SSL/โหลดหน้าเว็บ)
+        # ไม่กิน CPU — pool.map คืนผลตามลำดับ input เสมอ ลำดับจึงไม่สลับ
+        with ThreadPoolExecutor(max_workers=workers) as pool:
+            results = list(pool.map(scan_one, urls))
 
-    for r in results:
-        _save_history(user, r, True)  # ข้ามรายการที่ ok=False ให้เองอยู่แล้ว
+        # เขียนประวัติทีหลังในเธรดของงานนี้เธรดเดียว (db.session ใช้ข้ามเธรดไม่ได้)
+        job_user = db.session.get(User, user_id)
+        for r in results:
+            _save_history(job_user, r, True)  # ข้ามรายการที่ ok=False ให้เองอยู่แล้ว
+        return results
 
-    return jsonify({"ok": True, "results": results})
+    job_id = jobs.submit(current_app._get_current_object(), user_id, len(urls), work)
+    return _accepted(job_id, len(urls))
+
+
+@check_bp.route("/check/bulk/<job_id>", methods=["GET"])
+@limiter.limit("240 per minute")   # หน้าเว็บถามทุก ~1 วินาที ต้องไม่ชนลิมิตเอง
+def api_check_bulk_status(job_id):
+    """ถามความคืบหน้าของงาน bulk (ใช้ร่วมกันทั้งโหมดลิงก์และโหมด QR)
+
+    state: queued -> running -> done | failed
+    results จะเป็น null จนกว่า state จะเป็น done
+    """
+    user, _ = _current_actor()
+    if user is None:
+        return jsonify({"ok": False, "error": "กรุณาล็อกอินก่อน"}), 401
+
+    job = jobs.get(job_id, user.id)
+    if job is None:
+        return jsonify({"ok": False, "error": "ไม่พบงานนี้ (อาจหมดอายุแล้ว) กรุณาตรวจใหม่"}), 404
+    if job["state"] == "failed":
+        return jsonify({"ok": False, "error": "ตรวจไม่สำเร็จ กรุณาลองใหม่", **job}), 500
+    return jsonify({"ok": True, **job})
 
 
 @check_bp.route("/history", methods=["GET"])
@@ -333,4 +396,6 @@ def api_history_export():
 
 @check_bp.route("/health")
 def health():
-    return jsonify({"ok": True, "service": "phishing-link-checker"})
+    """เช็กว่าเซิร์ฟเวอร์ยังอยู่ + ตัวเลขสุขภาพระบบ (ไม่มีข้อมูลผู้ใช้ จึงเปิดให้ทุกคนดูได้)"""
+    return jsonify({"ok": True, "service": "phishing-link-checker",
+                    "scan_cache": scan_cache.stats(), "bulk_jobs": jobs.stats()})

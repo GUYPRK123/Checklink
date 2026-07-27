@@ -71,7 +71,7 @@ python app.py
 
 ```bash
 cd backend && source .venv/bin/activate
-waitress-serve --host=0.0.0.0 --port=5000 app:app
+waitress-serve --host=0.0.0.0 --port=5000 --threads=16 app:app
 ```
 
 เปิดเว็บที่ **http://198.199.122.176:5000**
@@ -84,7 +84,7 @@ FLASK_ENV=production \
 SECRET_KEY='ค่าคงที่ที่สุ่มมาครั้งเดียว' \
 CORS_ORIGINS="http://198.199.122.176:5000" \
 SESSION_COOKIE_SECURE=false \
-waitress-serve --host=0.0.0.0 --port=5000 app:app
+waitress-serve --host=0.0.0.0 --port=5000 --threads=16 app:app
 ```
 
 ### รันค้างไว้แม้ปิด SSH
@@ -96,7 +96,7 @@ waitress-serve --host=0.0.0.0 --port=5000 app:app
 
 ```bash
 cd backend && source .venv/bin/activate
-nohup waitress-serve --host=0.0.0.0 --port=5000 app:app > ../../app.log 2>&1 &
+nohup waitress-serve --host=0.0.0.0 --port=5000 --threads=16 app:app > ../../app.log 2>&1 &
 tail -f ../../app.log      # ดู log
 ```
 
@@ -186,6 +186,11 @@ SESSION_COOKIE_SECURE=true   # ตั้งได้ "หลัง" มี HTTPS
 | `PREMIUM_DURATION_DAYS` | - | `30` |
 | `BULK_CHECK_MAX_URLS` | - | `20` |
 | `BULK_CHECK_WORKERS` | - | `5` |
+| `BULK_JOB_CONCURRENCY` | - | `2` |
+| `BULK_JOB_TTL` | - | `1800` |
+| `SCAN_CACHE_TTL` | - | `900` (0 = ปิดแคช) |
+| `SCAN_CACHE_MAX` | - | `2000` |
+| `WARMUP_URL` | - | `https://example.com` (ว่าง = ปิด) |
 
 ---
 
@@ -193,15 +198,39 @@ SESSION_COOKIE_SECURE=true   # ตั้งได้ "หลัง" มี HTTPS
 
 | Endpoint | ใช้ได้กับ | หมายเหตุ |
 |---|---|---|
-| `POST /api/check` | ทุกคน | body = `{"url": "..."}` |
+| `POST /api/check` | ทุกคน | body = `{"url": "..."}` — ตอบผลทันที |
 | `POST /api/check/qr` | ทุกคน | body = `{"payload": "<เนื้อหาที่ถอดจาก QR>"}` |
-| `POST /api/check/bulk` | พรีเมียม | body = `{"urls": [...]}` — ยิงขนาน |
-| `POST /api/check/qr/bulk` | พรีเมียม | body = `{"items": [{"payload": "..."}]}` |
+| `POST /api/check/bulk` | พรีเมียม | body = `{"urls": [...]}` — **ตอบ 202 + `job_id`** |
+| `POST /api/check/qr/bulk` | พรีเมียม | body = `{"items": [{"payload": "..."}]}` — **ตอบ 202 + `job_id`** |
+| `GET /api/check/bulk/<job_id>` | เจ้าของงาน | ถามความคืบหน้า/ผลของงาน bulk |
 | `GET /api/history` | สมาชิก | 50 รายการล่าสุด |
 | `GET /api/history/export` | พรีเมียม | CSV |
-| `GET /api/health` | ทุกคน | เช็กว่าเซิร์ฟเวอร์ยังอยู่ |
+| `GET /api/health` | ทุกคน | สถานะ + สถิติแคชและงาน bulk |
 
 ทุก endpoint ข้างบนรับได้ทั้ง **cookie จากการล็อกอิน** และ **header `X-API-Key`** (พรีเมียม)
+
+### การตรวจแบบ bulk เป็นงานเบื้องหลัง
+
+`POST /api/check/bulk` ไม่รอจนตรวจเสร็จแล้วค่อยตอบ แต่รับงานแล้วตอบทันที:
+
+```bash
+# 1) สั่งงาน -> ได้ job_id กลับมาใน ~0.02 วินาที
+curl -s -X POST http://โดเมน/api/check/bulk -H 'X-API-Key: pfk_...' \
+     -H 'Content-Type: application/json' -d '{"urls":["https://a.com","https://b.com"]}'
+# {"ok":true,"job_id":"ae5c...","total":2,"state":"queued","poll_url":"/api/check/bulk/ae5c..."}
+
+# 2) ถามความคืบหน้าเป็นระยะจนกว่า state จะเป็น done
+curl -s http://โดเมน/api/check/bulk/ae5c... -H 'X-API-Key: pfk_...'
+# {"ok":true,"state":"running","done":1,"total":2,"results":null}
+# {"ok":true,"state":"done","done":2,"total":2,"results":[...]}
+```
+
+**ทำไมถึงเปลี่ยน:** การตรวจ 20 ลิงก์ใช้เวลาได้ราว 8 วินาที ตลอดเวลานั้นมันยึด worker
+thread ของ waitress ไว้ 1 เส้นจากไม่กี่เส้น ผลคือสมาชิกพรีเมียมไม่กี่คนที่กด bulk พร้อมกัน
+ทำให้ **ทั้งเว็บ** ช้าสำหรับทุกคน รวมถึงคนที่แค่จะเปิดหน้าแรก
+
+`state` ไล่จาก `queued` → `running` → `done` (หรือ `failed`) และ `results` จะเป็น `null`
+จนกว่าจะ `done` — งานเก็บในหน่วยความจำ ถ้ารีสตาร์ตเซิร์ฟเวอร์งานที่ค้างจะหาย ให้สั่งใหม่
 
 ---
 

@@ -13,6 +13,7 @@ API หลัก:  POST /api/check   body = {"url": "..."}   -> ผลการ�
 """
 import os
 import threading
+import time
 
 from flask import Flask, send_from_directory, jsonify, request
 from flask_cors import CORS
@@ -51,10 +52,38 @@ def _security_headers(response):
     return response
 
 
-def _preload_blocklist():
+def _startup_warmup():
+    """อุ่นเครื่องในเบื้องหลังตอนสตาร์ต ทำ 2 อย่างเรียงกัน (ไม่ยิงพร้อมกันเพื่อไม่ให้
+    เครือข่ายกระตุกตอนบูต):
+
+      1) โหลดบัญชีดำของ สกมช. ล่วงหน้า เพื่อให้การตรวจครั้งแรกไม่ต้องรอดาวน์โหลด
+         (ถ้าโหลดไม่ได้ ระบบยังทำงานได้โดยใช้การวิเคราะห์สดในชั้นที่ 2)
+      2) ตรวจลิงก์จริงหนึ่งครั้งแบบทิ้งผล เพื่ออุ่น DNS resolver, TLS session cache
+         และการเชื่อมต่อของ requests
+
+    ข้อ 2 สำคัญกว่าที่คิด: การตรวจเชิงลึก "ครั้งแรก" หลัง process เพิ่งสตาร์ตวัดได้ราว
+    16 วินาที ขณะที่ครั้งต่อ ๆ ไปเหลือ 0.3-4 วินาที ถ้าไม่อุ่นไว้ ผู้ใช้คนแรกหลังทุกครั้ง
+    ที่ systemd รีสตาร์ตจะเป็นคนรับกรรมนั้นแทน
+
+    ตั้ง WARMUP_URL="" เพื่อปิด (เช่นตอนรันในเครื่องที่ไม่มีเน็ต)
+    """
     from analyzer.blacklist_api import load_blocklist
+
     n = load_blocklist()
     print(f"[blocklist] โหลดโดเมนอันตรายจาก สกมช. แล้ว {n} รายการ")
+
+    url = os.environ.get("WARMUP_URL", "https://example.com").strip()
+    if not url:
+        return
+    try:
+        # ใช้ตัวที่ไม่ผ่านแคชโดยตั้งใจ ผลอุ่นเครื่องไม่ควรไปนั่งกินที่ในแคชของผู้ใช้จริง
+        from analyzer.scanner import _scan_uncached
+        started = time.perf_counter()
+        _scan_uncached(url, run_deep=True)
+        print(f"[warmup] อุ่นเครื่องด้วย {url} เสร็จใน {time.perf_counter() - started:.1f} วินาที")
+    except Exception as e:
+        # อุ่นเครื่องไม่สำเร็จไม่ใช่เรื่องคอขาดบาดตาย ระบบยังทำงานได้ปกติ แค่ช้าครั้งแรก
+        print(f"[warmup] อุ่นเครื่องไม่สำเร็จ ({type(e).__name__}: {e}) — ข้ามไป")
 
 
 # คอลัมน์ที่ถูกเพิ่มเข้ามาทีหลัง (ตาราง -> {ชื่อคอลัมน์: นิยาม SQL})
@@ -153,9 +182,7 @@ def create_app() -> Flask:
         print("[frontend] !! หา index.html ไม่เจอ -> ตรวจว่าโครงสร้างโฟลเดอร์ครบ "
               "และรัน python app.py จากในโฟลเดอร์ backend")
 
-    # โหลดบัญชีดำของ สกมช. ล่วงหน้าในเบื้องหลัง เพื่อให้การตรวจครั้งแรกไม่ช้า
-    # (ถ้าโหลดไม่ได้ ระบบยังทำงานได้โดยใช้การวิเคราะห์สดในชั้นที่ 2)
-    threading.Thread(target=_preload_blocklist, daemon=True).start()
+    threading.Thread(target=_startup_warmup, daemon=True).start()
 
     return app
 

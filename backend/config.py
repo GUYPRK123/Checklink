@@ -67,3 +67,10 @@ class Config:
     # จำนวนลิงก์ที่ยิงตรวจพร้อมกันในโหมด bulk (งานนี้รอเน็ตเป็นหลัก ไม่กิน CPU)
     # อย่าตั้งสูงเกินไป เพราะแต่ละลิงก์เปิดหลาย connection ในชั้นที่ 4 อยู่แล้ว
     BULK_CHECK_WORKERS = int(os.environ.get("BULK_CHECK_WORKERS", "5"))
+
+    # ตัวแปรอื่นที่เกี่ยวข้อง อ่านจาก env โดยตรงในไฟล์ที่ใช้ (ไม่ผ่าน Flask config
+    # เพราะโมดูลพวกนี้จงใจไม่ผูกกับ Flask จะได้เทสต์/ยกไปใช้ที่อื่นได้):
+    #   SCAN_CACHE_TTL / SCAN_CACHE_MAX          -> analyzer/scan_cache.py
+    #   BULK_JOB_CONCURRENCY / BULK_JOB_TTL      -> jobs.py
+    #   WARMUP_URL                                -> app.py
+    #   NCSA_BLOCKLIST_URL / NCSA_CACHE_TTL      -> analyzer/blacklist_api.py

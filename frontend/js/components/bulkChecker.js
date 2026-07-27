@@ -22,9 +22,15 @@ export function mountBulkChecker(panel, maxUrls, onDone) {
     const urls = input.value.split("\n").map(s => s.trim()).filter(Boolean);
     if (!urls.length) return;
     button.disabled = true;
-    resultEl.innerHTML = `<div class="loading"><span class="spin"></span> กำลังเช็ค ${urls.length} ลิงก์...</div>`;
+    // งานทำเบื้องหลังแล้วรายงานความคืบหน้ากลับมา จึงบอกผู้ใช้ได้ว่าถึงไหนแล้ว
+    // แทนที่จะให้หมุนเฉย ๆ โดยไม่รู้ว่าค้างหรือยังทำอยู่
+    const showProgress = (done, total) => {
+      resultEl.innerHTML = `<div class="loading"><span class="spin"></span> ` +
+        `กำลังเช็ค ${esc(String(done))}/${esc(String(total))} ลิงก์...</div>`;
+    };
+    showProgress(0, urls.length);
     try {
-      const { results } = await checkUrlsBulk(urls);
+      const { results } = await checkUrlsBulk(urls, showProgress);
       resultEl.innerHTML = results.map(r => {
         if (!r.ok) return `<div class="history-row"><span class="history-url">${esc(r.input || "")}</span>
           <span class="history-badge yellow">ตรวจไม่ได้</span></div>`;

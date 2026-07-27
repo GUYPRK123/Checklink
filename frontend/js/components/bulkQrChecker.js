@@ -90,7 +90,8 @@ export function mountBulkQrChecker(panel, maxItems, onDone) {
     }
 
     try {
-      const { results } = await checkQrBulk(items);
+      const { results } = await checkQrBulk(items, (done, total) =>
+        setStatus(`กำลังตรวจ ${done}/${total} รายการ...`));
       renderResults(results, emptyFiles);
       if (onDone) onDone();
     } catch (err) {

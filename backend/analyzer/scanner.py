@@ -26,6 +26,7 @@ scanner.py
 import time
 from concurrent.futures import ThreadPoolExecutor
 
+from . import scan_cache
 from .blacklist_api import check_blacklist
 from .url_parser import parse_url
 from .heuristics import analyze
@@ -205,7 +206,20 @@ def scan(url: str, run_deep: bool = True) -> dict:
 
     run_deep=False ข้ามชั้นที่ 3 (ตาม redirect) และชั้นที่ 4 (อายุโดเมน/SSL/เนื้อหาเว็บ)
     ทั้งคู่ เพราะเป็นชั้นที่ยิง request ออกนอกเครือข่ายจริงและกินทรัพยากรเซิร์ฟเวอร์มาก
-    ใช้สำหรับผู้ใช้ที่ไม่ได้ล็อกอินหรือใช้โควตาฟรีหมดแล้ว (ยังได้ผลชั้น 1-2 ครบถ้วน)"""
+    ใช้สำหรับผู้ใช้ที่ไม่ได้ล็อกอินหรือใช้โควตาฟรีหมดแล้ว (ยังได้ผลชั้น 1-2 ครบถ้วน)
+
+    ผลลัพธ์ถูก cache ไว้ระยะสั้น (ดู scan_cache.py) ลิงก์เดียวกันที่ถูกตรวจซ้ำภายใน TTL
+    จะได้ผลเดิมทันทีโดยไม่ยิงเน็ตใหม่ ผลที่มาจากแคชจะมี "cached": True ติดมาด้วย"""
+    cached = scan_cache.get(url, run_deep)
+    if cached is not None:
+        return cached
+    result = _scan_uncached(url, run_deep)
+    scan_cache.put(url, run_deep, result)
+    return result
+
+
+def _scan_uncached(url: str, run_deep: bool = True) -> dict:
+    """ตัวตรวจจริง — ไม่ผ่านแคช (แยกไว้เพื่อให้เทสต์/บังคับตรวจใหม่เรียกตรงได้)"""
     started = time.perf_counter()
 
     parsed = parse_url(url)

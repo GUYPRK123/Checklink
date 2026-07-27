@@ -72,8 +72,45 @@ export async function checkUrl(url) {
   return res.json();
 }
 
-export async function checkUrlsBulk(urls) {
-  return authedFetch("/api/check/bulk", { body: { urls } });
+// ---------- งานแบบ bulk (ทำเบื้องหลัง) ----------
+//
+// endpoint แบบ bulk ไม่ตอบผลลัพธ์กลับมาทันทีแล้ว แต่ตอบ job_id มาให้ (HTTP 202)
+// เพราะการตรวจ 20 ลิงก์ใช้เวลาได้หลายวินาที ถ้ารอในคำขอเดียวจะยึด worker ของ
+// เซิร์ฟเวอร์ไว้จนคนอื่นทั้งเว็บช้าตาม ฝั่งนี้จึงถามความคืบหน้าเป็นระยะแทน
+const POLL_INTERVAL_MS = 1000;
+const POLL_TIMEOUT_MS = 5 * 60 * 1000;   // กันวนไม่รู้จบถ้าเซิร์ฟเวอร์เงียบไปเฉย ๆ
+
+const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+
+async function pollBulkJob(jobId, onProgress) {
+  const deadline = Date.now() + POLL_TIMEOUT_MS;
+  while (Date.now() < deadline) {
+    await sleep(POLL_INTERVAL_MS);
+    let res;
+    try {
+      res = await fetch(`${BASE_URL}/api/check/bulk/${jobId}`, { credentials: "include" });
+    } catch (e) {
+      throw new Error("ต่อ backend ไม่ได้ระหว่างรอผลตรวจ");
+    }
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || data.ok === false) {
+      throw new Error(data.error || `เซิร์ฟเวอร์ตอบกลับผิดพลาด (${res.status})`);
+    }
+    if (onProgress) onProgress(data.done, data.total);
+    if (data.state === "done") return data.results || [];
+  }
+  throw new Error("ตรวจนานเกินกำหนด กรุณาลองใหม่อีกครั้ง");
+}
+
+/** เริ่มงาน bulk แล้วรอจนเสร็จ — onProgress(done, total) ถูกเรียกระหว่างทาง */
+async function runBulkJob(path, body, onProgress) {
+  const started = await authedFetch(path, { body });
+  if (onProgress) onProgress(0, started.total);
+  return { results: await pollBulkJob(started.job_id, onProgress) };
+}
+
+export async function checkUrlsBulk(urls, onProgress) {
+  return runBulkJob("/api/check/bulk", { urls }, onProgress);
 }
 
 // ตรวจเนื้อหาที่ถอดได้จาก QR (เบราว์เซอร์ถอดรูปเป็นข้อความแล้วส่งมาแค่ข้อความ ไม่ส่งรูปเต็ม)
@@ -98,8 +135,8 @@ export async function checkQr(payload, thumb) {
   return res.json();
 }
 
-export async function checkQrBulk(items) {
-  return authedFetch("/api/check/qr/bulk", { body: { items } });
+export async function checkQrBulk(items, onProgress) {
+  return runBulkJob("/api/check/qr/bulk", { items }, onProgress);
 }
 
 export const auth = {
