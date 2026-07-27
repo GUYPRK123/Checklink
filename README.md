@@ -74,7 +74,7 @@ cd backend && source .venv/bin/activate
 waitress-serve --host=0.0.0.0 --port=5000 --threads=16 app:app
 ```
 
-เปิดเว็บที่ **http://198.199.122.176:5000**
+เปิดเว็บที่ **https://checkurl.studiodup.com** (ระหว่างยังไม่มี HTTPS ใช้ http://198.199.122.176:5000)
 
 ถ้าไม่ใช้ `.env` ก็ส่งค่าผ่าน env ตอนรันได้:
 
