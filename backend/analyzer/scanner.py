@@ -13,7 +13,9 @@ scanner.py
      นอกเครือข่ายจริง 2 ทาง (RDAP หาอายุโดเมน + TLS handshake หา certificate,
      และ GET หน้าเว็บปลายทางมาหาฟอร์ม/favicon ที่ผิดปกติ) รันเฉพาะตอนที่ชั้น 1-3
      ยังชี้ขาดไม่ได้ เพราะช้ากว่าชั้นอื่นมากและไม่จำเป็นถ้ารู้ผลชัดเจนอยู่แล้ว
-  5) decide() รวมผลทั้งหมดเป็นคำตัดสินสุดท้าย
+  5) apply_combos() ให้คะแนนพิเศษกับ "ชุดสัญญาณ" ที่อยู่ด้วยกันแล้วมีความหมายมากกว่า
+     ผลบวกของมันเอง (เช่น อ้างชื่อแบรนด์ + ขอรหัสผ่าน) ต้องทำหลังรวมสัญญาณครบทุกชั้น
+  6) decide() รวมผลทั้งหมดเป็นคำตัดสินสุดท้าย
 
 กติกาตัดสิน (Analyst กำหนด):
   - เขียว (ปลอดภัย): ยืนยันว่าเป็นเว็บจริงเท่านั้น (ตรงลิสต์แบรนด์ หรือ API บอกปลอดภัย)
@@ -28,6 +30,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 from . import scan_cache
 from .blacklist_api import check_blacklist
+from .combos import apply_combos
 from .url_parser import parse_url
 from .heuristics import analyze
 from .destination_checker import resolve_destination
@@ -172,7 +175,7 @@ def _ensure_scheme(parsed: dict) -> str:
     return raw if parsed.get("protocol_known") else "http://" + raw
 
 
-def _run_layer4(effective_parsed: dict):
+def _run_layer4(effective_parsed: dict, allow_sandbox: bool = False):
     """ชั้นที่ 4 (เสริม): อายุโดเมน + SSL certificate + เนื้อหาหน้าเว็บจริง
     ทั้งสามงานเป็น I/O ที่ไม่เกี่ยวข้องกัน (RDAP, TLS handshake, HTTP GET) จึงรันพร้อม
     กันด้วย thread เพื่อไม่ให้ latency รวมเป็นผลรวมของทั้งสามอย่าง
@@ -187,7 +190,7 @@ def _run_layer4(effective_parsed: dict):
                             "ssl": {"checked": False}}
     with ThreadPoolExecutor(max_workers=2) as pool:
         domain_fut = None if is_ip else pool.submit(analyze_domain_intel, reg, host)
-        content_fut = pool.submit(analyze_content, url, reg)
+        content_fut = pool.submit(analyze_content, url, reg, allow_sandbox)
         content_result = content_fut.result()
         domain_result = domain_fut.result() if domain_fut is not None else empty_domain_result
 
@@ -197,6 +200,11 @@ def _run_layer4(effective_parsed: dict):
         "domain_age": domain_result["domain_age"],
         "ssl": domain_result["ssl"],
         "content_checked": content_result["checked"],
+        # ข้อเท็จจริงของหน้า (ไม่ใช่สัญญาณเสี่ยง ไม่มีคะแนน) ใช้เป็นเงื่อนไขของ combo
+        "content_facts": content_result.get("facts", []),
+        "combos_hit": [],   # เติมทีหลังใน _scan_uncached เมื่อรวมสัญญาณครบทุกชั้นแล้ว
+        # "requests" = อ่าน HTML ดิบอย่างเดียว / "sandbox" = รัน JavaScript จริงแล้ว
+        "page_source": content_result.get("page_source", ""),
     }
     return signals, diagnostics
 
@@ -233,7 +241,8 @@ def _scan_uncached(url: str, run_deep: bool = True) -> dict:
     extra_signals = []
     destination = {"resolved": False, "chain": [url], "final_url": url, "hops": 0}
     layer4 = {"ran": False, "domain_age": {"checked": False},
-              "ssl": {"checked": False}, "content_checked": False}
+              "ssl": {"checked": False}, "content_checked": False,
+              "content_facts": [], "combos_hit": [], "page_source": ""}
 
     if run_deep:
         destination = resolve_destination(url)  # ชั้น 3 (ปลายทางจริง)
@@ -258,13 +267,27 @@ def _scan_uncached(url: str, run_deep: bool = True) -> dict:
         # ก่อนหน้ามาก และไม่จำเป็นถ้ารู้ผลชัดเจนแล้ว
         already_decided = (api_result.get("found") and api_result.get("malicious")) or analysis.get("verified_safe")
         if not already_decided and not destination.get("blocked") and effective_parsed.get("valid"):
-            layer4_signals, layer4 = _run_layer4(effective_parsed)
+            # ส่งเข้า sandbox ได้เฉพาะตอนที่ผลยังก้ำกึ่งจริง ๆ ถ้าคะแนนจากชั้น 1-3
+            # ทะลุเกณฑ์แดงไปแล้ว การรัน JavaScript เพิ่มก็ไม่เปลี่ยนคำตอบ มีแต่ทำให้ช้า
+            allow_sandbox = analysis["score"] < RED_SCORE
+            layer4_signals, layer4 = _run_layer4(effective_parsed, allow_sandbox)
             extra_signals += layer4_signals
 
     if extra_signals:
         analysis = {**analysis,
                     "signals": extra_signals + analysis["signals"],
                     "score": analysis["score"] + sum(s["points"] for s in extra_signals)}
+
+    # ---- กฎการรวมสัญญาณ (ทำหลังสุด เพราะต้องเห็นสัญญาณครบทุกชั้นก่อน) ----
+    # สัญญาณอ่อนหลายตัวที่มาพร้อมกันมีความหมายมากกว่าผลบวกของมันเอง เช่น "อ้างชื่อ
+    # แบรนด์" + "ขอรหัสผ่าน" แยกกันยังอธิบายได้ แต่มาคู่กันคือหน้าขโมยบัญชี (ดู combos.py)
+    present = {s["id"] for s in analysis["signals"]} | set(layer4.get("content_facts", []))
+    combo_signals = apply_combos(present)
+    if combo_signals:
+        analysis = {**analysis,
+                    "signals": combo_signals + analysis["signals"],
+                    "score": analysis["score"] + sum(s["points"] for s in combo_signals)}
+        layer4 = {**layer4, "combos_hit": [c["id"] for c in combo_signals]}
 
     verdict = decide(api_result, analysis)
     elapsed_ms = max(1, round((time.perf_counter() - started) * 1000))
