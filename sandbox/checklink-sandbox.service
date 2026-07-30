@@ -1,0 +1,84 @@
+# ============================================================================
+# checklink-sandbox.service — บริการ sandbox ที่รัน Chromium เปิดหน้าเว็บต้องสงสัย
+#
+# ติดตั้ง:
+#   sudo cp /home/url/checkurl-app/Checklink/sandbox/checklink-sandbox.service \
+#           /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now checklink-sandbox
+#
+# ดูขั้นตอนเต็ม (สร้าง user, ติดตั้ง Chromium, ตั้ง token) ที่ sandbox/README.md
+# ----------------------------------------------------------------------------
+# ค่าทั้งหมดในส่วน [Service] ที่ขึ้นต้นด้วย Protect/Private/Restrict/NoNew มีไว้
+# ตอบคำถามเดียว: "ถ้าโค้ดของมิจฉาชีพหลุดออกมาจาก Chromium ได้ มันจะทำอะไรต่อได้บ้าง"
+# คำตอบที่ต้องการคือ "แทบไม่ได้อะไรเลย" — อย่าถอดบรรทัดไหนออกโดยไม่เข้าใจว่ากันอะไร
+# ============================================================================
+[Unit]
+Description=Checklink sandbox (Chromium page fetcher)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=checklink-sandbox
+Group=checklink-sandbox
+WorkingDirectory=/home/checklink-sandbox
+
+# token ใช้ร่วมกับเว็บหลัก — ไฟล์นี้ root เป็นเจ้าของ สิทธิ์ 0640 กลุ่ม checklink-sandbox
+EnvironmentFile=/etc/checklink-sandbox.env
+ExecStart=/home/checklink-sandbox/venv/bin/python /home/checklink-sandbox/sandbox_server.py
+
+Restart=always
+RestartSec=3
+# ยอมแพ้หลังพลาด 5 ครั้งใน 1 นาที แทนที่จะวนรีสตาร์ตทุก 3 วินาทีไม่รู้จบ
+# (ตอนตั้งค่าผิดครั้งแรกมันวนไป 58 รอบก่อนจะมีคนสังเกตเห็น)
+# กลับมาลองใหม่ด้วย: sudo systemctl reset-failed checklink-sandbox && sudo systemctl start checklink-sandbox
+StartLimitIntervalSec=60
+StartLimitBurst=5
+
+# ---- แรม: จุดสำคัญที่สุดของเครื่องนี้ ----
+# เครื่องมีแรมรวม 458 MB ถ้า Chromium บานเกินเพดาน ให้ kernel ฆ่า "เฉพาะบริการนี้"
+# ไม่ใช่ปล่อยให้ OOM killer ไปเลือกฆ่าโปรเซสเว็บหลักแทน
+MemoryMax=350M
+MemoryHigh=300M
+# ห้ามแย่งซีพียูจนเว็บหลักหน่วง
+CPUQuota=60%
+TasksMax=200
+# ถูกฆ่าเพราะแรมไม่ใช่เรื่องผิดปกติของบริการนี้ ให้รีสตาร์ตแล้วไปต่อ
+OOMPolicy=continue
+
+# ---- สิทธิ์: ตัดให้เหลือน้อยที่สุด ----
+NoNewPrivileges=yes
+PrivateTmp=yes
+PrivateDevices=no
+# ^ Chromium ต้องใช้ /dev/shm จึงปิดสนิทไม่ได้ (มี --disable-dev-shm-usage ช่วยอีกทาง)
+ProtectSystem=strict
+# ProtectHome=tmpfs ทำให้ /home กลายเป็นโฟลเดอร์ว่างเปล่าในสายตาบริการนี้ —
+# มองไม่เห็นแม้แต่ชื่อว่ามี /home/url อยู่ ซึ่งแรงกว่าการพึ่งสิทธิ์ของโฟลเดอร์อย่างเดียว
+# แล้วค่อยต่อเฉพาะบ้านของตัวเองกลับเข้ามาด้วย BindPaths (ที่เก็บ venv + Chromium)
+#
+# ⚠️ ห้ามใช้ ProtectHome=yes คู่กับ ExecStart ที่อยู่ใต้ /home — จะได้ 203/EXEC
+# เพราะบริการหาไฟล์ที่จะรันไม่เจอตั้งแต่แรก (พลาดตรงนี้มาแล้วตอนตั้งครั้งแรก)
+ProtectHome=tmpfs
+BindPaths=/home/checklink-sandbox
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+ProtectProc=invisible
+RestrictSUIDSGID=yes
+RestrictRealtime=yes
+RestrictNamespaces=no
+# ^ Chromium ต้องใช้ user namespace ทำ sandbox ในตัวมันเอง ถ้าปิดจะเปิดไม่ขึ้น
+LockPersonality=yes
+RemoveIPC=yes
+CapabilityBoundingSet=
+AmbientCapabilities=
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX AF_NETLINK
+SystemCallArchitectures=native
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target

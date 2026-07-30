@@ -1,0 +1,3 @@
+# ไลบรารีของบริการ sandbox เท่านั้น — แยกจาก backend/requirements.txt โดยตั้งใจ
+# venv ของ sandbox ต้องไม่มี Flask/SQLAlchemy หรืออะไรที่แตะฐานข้อมูลได้เลย
+playwright>=1.44

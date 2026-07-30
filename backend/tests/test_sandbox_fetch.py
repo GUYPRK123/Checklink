@@ -63,6 +63,61 @@ class Testยังไม่ได้ตั้งค่า:
         assert b["source"] == "sandbox"
 
 
+class Testหน้าerrorต้องนับเป็นเช็กไม่ได้:
+    """403/404/500 ไม่ใช่เนื้อหาจริงของเว็บนั้น ถ้าเอาไปวิเคราะห์จะได้สัญญาณขยะ
+    (หน้าสั้น ไม่มีลิงก์ ไม่มี favicon) ซึ่งเป็นลักษณะของหน้า error ทุกหน้าในโลก
+
+    เคสจริงที่ทำให้เจอ: pantip.com ตอบ 403 ให้บอต แล้วระบบเอาหน้า 403 ไปวิเคราะห์
+    จนได้ 2 คะแนนโดยที่เว็บไม่ได้มีอะไรผิดเลย
+    """
+
+    def test_ตัวดึงแบบเบาปฏิเสธหน้าerror(self, monkeypatch):
+        from analyzer import page_fetch
+
+        class FakeResp:
+            status_code = 403
+            headers = {"Content-Type": "text/html"}
+            url = "https://pantip.com/"
+            encoding = "utf-8"
+
+            def iter_content(self, n):
+                yield b"<html><body>403 Forbidden</body></html>"
+
+            def close(self):
+                pass
+
+        import requests
+        monkeypatch.setattr(requests, "get", lambda *a, **k: FakeResp())
+        monkeypatch.setattr(page_fetch, "_resolve_safe_ips",
+                            lambda host: ("1.2.3.4", "", ""))
+
+        b = page_fetch.fetch_page("https://pantip.com/")
+        assert b["ok"] is False
+        assert "403" in b["reason"]
+
+    def test_หน้าปกติยังผ่านเหมือนเดิม(self, monkeypatch):
+        from analyzer import page_fetch
+
+        class FakeResp:
+            status_code = 200
+            headers = {"Content-Type": "text/html; charset=utf-8"}
+            url = "https://example.com/"
+            encoding = "utf-8"
+
+            def iter_content(self, n):
+                yield b"<html><body>hello</body></html>"
+
+            def close(self):
+                pass
+
+        import requests
+        monkeypatch.setattr(requests, "get", lambda *a, **k: FakeResp())
+        monkeypatch.setattr(page_fetch, "_resolve_safe_ips",
+                            lambda host: ("1.2.3.4", "", ""))
+
+        assert page_fetch.fetch_page("https://example.com/")["ok"] is True
+
+
 class Testรับคำตอบที่ถูกต้อง:
     def test_แปลงเป็นbundleครบถ้วน(self, monkeypatch, ตั้งค่าsandbox):
         ให้sandboxตอบ(monkeypatch, FakeResponse(payload=GOOD_PAYLOAD))

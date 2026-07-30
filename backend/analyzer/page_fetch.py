@@ -76,6 +76,16 @@ def fetch_page(url: str) -> dict:
     except Exception:
         return empty_bundle("เชื่อมต่อหน้าเว็บไม่ได้")
 
+    # หน้า error (403/404/500) ไม่ใช่เนื้อหาจริงของเว็บนั้น การเอาไปวิเคราะห์จะได้
+    # สัญญาณขยะ เช่น "หน้าเล็กผิดปกติ" หรือ "ไม่มีลิงก์ไปหน้าอื่น" ซึ่งเป็นลักษณะของ
+    # หน้า error ทุกหน้าในโลก ไม่ได้บอกอะไรเกี่ยวกับเว็บที่ผู้ใช้ถามเลย
+    # กรณีที่เจอบ่อยที่สุดคือเว็บที่กันบอตแล้วตอบ 403 ให้เรา (เช่น pantip.com)
+    # ตามหลักของระบบ กรณีแบบนี้ต้องเป็น "เช็กไม่ได้" ไม่ใช่ "ตรวจแล้วไม่พบอะไร"
+    if resp.status_code >= 400:
+        code = resp.status_code
+        resp.close()
+        return empty_bundle(f"ปลายทางตอบ HTTP {code}")
+
     ctype = resp.headers.get("Content-Type", "")
     if "html" not in ctype.lower():
         resp.close()
