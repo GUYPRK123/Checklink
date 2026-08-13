@@ -28,7 +28,9 @@ import socket
 from urllib.parse import urljoin, urlsplit
 
 MAX_HOPS = 5
-TIMEOUT = 5  # วินาทีต่อ hop
+# แยกเป็น (connect, read): ปลายทางที่ "ต่อไม่ได้เลย" ควรรู้ผลเร็ว (5 วิ)
+# ส่วนที่ต่อได้แต่ตอบช้าให้เวลามากกว่า (10 วิ) — requests รองรับ tuple โดยตรง
+TIMEOUT = (5, 10)  # (connect, read) วินาทีต่อ hop
 _HAS_SCHEME = re.compile(r"^[a-zA-Z][a-zA-Z0-9+.\-]*://")
 USER_AGENT = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
               "(KHTML, like Gecko) Chrome/124.0 Safari/537.36 checker-bot/1.0")

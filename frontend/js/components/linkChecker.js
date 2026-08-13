@@ -1,6 +1,6 @@
 // linkChecker.js — component โหมด "ตรวจลิงก์"
 import { checkUrl } from "../api.js";
-import { renderResult, renderLoading } from "./resultCard.js";
+import { renderResult, renderScanProgress } from "./resultCard.js";
 
 const EXAMPLES = [
   { label: "ลิงก์จริงของธนาคาร", url: "https://www.scb.co.th/personal-banking.html" },
@@ -31,13 +31,14 @@ export function mountLinkChecker(panel, resultEl) {
     const url = input.value.trim();
     if (!url) { input.focus(); return; }
     button.disabled = true;
-    renderLoading(resultEl, "กำลังตรวจสอบ — เทียบฐานข้อมูล สกมช. แล้ววิเคราะห์ลิงก์...");
+    const progress = renderScanProgress(resultEl);  // โชว์ขั้น 4 ชั้นระหว่างรอ
     try {
       const res = await checkUrl(url);
       renderResult(resultEl, res);
     } catch (err) {
       renderResult(resultEl, { ok: false, error: err.message });
     } finally {
+      progress.stop();          // ผลมาแล้ว (DOM ถูกแทนที่) — เก็บกวาด timer ที่เหลือ
       button.disabled = false;
     }
   }

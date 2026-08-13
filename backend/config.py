@@ -74,3 +74,4 @@ class Config:
     #   BULK_JOB_CONCURRENCY / BULK_JOB_TTL      -> jobs.py
     #   WARMUP_URL                                -> app.py
     #   NCSA_BLOCKLIST_URL / NCSA_CACHE_TTL      -> analyzer/blacklist_api.py
+    #   ANON_DEEP_CHECKS_PER_DAY                  -> anon_quota.py

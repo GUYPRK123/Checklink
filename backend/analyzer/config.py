@@ -146,6 +146,7 @@ WEIGHTS = {
     "userinfo_at":         (5, "critical"),
     "internal_redirect":   (6, "critical"),  # ชั้น 3: redirect ไปยัง IP ภายในเครือข่าย
     "punycode":            (4, "high"),
+    "homoglyph_brand":     (6, "critical"),  # อักขระต่างภาษาเลียนแบบแบรนด์ (จับตั้งแต่ชั้น parse)
     "risky_tld":           (3, "high"),
     "deep_subdomain":      (2, "medium"),
     "shortener":           (0, "medium"),   # ไม่บวกคะแนน แต่บังคับให้อย่างน้อยเป็นเหลือง

@@ -1,30 +1,8 @@
 # ============================================================================
 # deploy/phishing-checker.service — systemd unit สำหรับรัน Checklink ค้างไว้
-#
-# แก้ปัญหาที่ RUNBOOK ข้อ 2.1 เตือนไว้: ตอนนี้ waitress ผูกกับ SSH session
-# ปิด terminal หรือเน็ตหลุดเมื่อไหร่เว็บดับทันที และไม่ขึ้นเองหลังรีบูตเครื่อง
-# systemd จะรันให้เป็นบริการของระบบ + รีสตาร์ทให้อัตโนมัติเมื่อ process ตาย
-#
-# วิธีติดตั้ง (เจ้าของเครื่องต้องรันเอง — เป็นคำสั่งระดับระบบ):
-#
-#   # 1. ให้ผู้ใช้ url เป็นเจ้าของโค้ดและฐานข้อมูล (ตอนนี้ไฟล์เป็นของ root อยู่)
-#   sudo chown -R url:url /home/url/checkurl-app/Checklink
-#
-#   # 2. ติดตั้ง unit แล้วเปิดใช้
-#   sudo cp /home/url/checkurl-app/Checklink/deploy/phishing-checker.service \
-#           /etc/systemd/system/
-#   sudo systemctl daemon-reload
-#   sudo systemctl enable --now phishing-checker
-#
-#   # 3. ตรวจสอบ
-#   systemctl status phishing-checker
-#   journalctl -u phishing-checker -f        # ดู log สด (แทน tail -f app.log)
-#
-# คำสั่งที่ใช้บ่อยหลังจากนี้:
-#   sudo systemctl restart phishing-checker   # หลังแก้โค้ดหรือแก้ .env
-#   sudo systemctl stop phishing-checker
+# วิธีติดตั้ง: sudo cp deploy/phishing-checker.service /etc/systemd/system/ &&
+#             sudo systemctl daemon-reload && sudo systemctl enable --now phishing-checker
 # ============================================================================
-
 [Unit]
 Description=Checklink — เว็บตรวจลิงก์/QR หลอกลวง (Flask + waitress)
 After=network-online.target
@@ -32,36 +10,19 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-User=url
-Group=url
-WorkingDirectory=/home/url/checkurl-app/Checklink/backend
-
-# ค่าตั้งทั้งหมดอ่านจาก backend/.env ผ่าน load_dotenv() ใน app.py อยู่แล้ว
-# จึงไม่ต้องใส่ Environment= ซ้ำที่นี่ (และไม่ควร เพราะ SECRET_KEY จะไปโผล่ใน
-# systemctl show / journalctl ซึ่งผู้ใช้อื่นบนเครื่องอ่านได้)
-
-# ⚠️ ผูกกับ 127.0.0.1 ไม่ใช่ 0.0.0.0 — ตั้งใจให้เข้าถึงได้ผ่าน Nginx เท่านั้น
-# (ดู deploy/nginx.conf) ถ้ายังไม่ได้ตั้ง Nginx และต้องการเข้าตรงด้วย IP ชั่วคราว
-# ให้เปลี่ยนเป็น --host=0.0.0.0 และอย่าลืมตั้ง BEHIND_PROXY=false ใน .env
-# ใช้ serve.py แทนคำสั่ง waitress-serve เพราะต้องตั้ง trusted_proxy ให้ waitress
-# ยอมรับ header X-Forwarded-* จาก Nginx (ไม่งั้น rate limit จะเห็นทุกคนเป็น 127.0.0.1
-# และไม่ส่ง HSTS) ค่านั้นเป็นรายการคั่นด้วยช่องว่างซึ่งเขียนใน ExecStart แล้วเสี่ยงพัง
-# เรื่องเครื่องหมายคำพูด — เหตุผลเต็มอยู่ในหัวไฟล์ backend/serve.py
-#
-# ตั้งค่าเพิ่มเติมได้ผ่าน .env: BIND_HOST, BIND_PORT, WAITRESS_THREADS, TRUSTED_PROXY
-ExecStart=/home/url/checkurl-app/Checklink/backend/.venv/bin/python serve.py
-
+User=checkurl
+Group=checkurl
+WorkingDirectory=/home/checkurl/Checklink/backend
+ExecStart=/home/checkurl/Checklink/backend/.venv/bin/python serve.py
 Restart=always
 RestartSec=3
 
-# ---- ลดสิทธิ์เท่าที่ทำได้ เผื่อวันหนึ่งมีช่องโหว่ในแอป ----
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=full
 ProtectHome=read-only
-# ยกเว้นโฟลเดอร์ที่แอปต้องเขียนจริง: ฐานข้อมูล SQLite และ cache บัญชีดำ สกมช.
-ReadWritePaths=/home/url/checkurl-app/Checklink/backend/instance
-ReadWritePaths=/home/url/checkurl-app/Checklink/backend/analyzer
+ReadWritePaths=/home/checkurl/Checklink/backend/instance
+ReadWritePaths=/home/checkurl/Checklink/backend/analyzer
 
 [Install]
 WantedBy=multi-user.target

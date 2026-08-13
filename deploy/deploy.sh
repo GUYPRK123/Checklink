@@ -3,10 +3,10 @@
 # deploy.sh — ขั้นตอน deploy หลังแก้โค้ดฝั่ง backend เสร็จ
 #
 # วิธีใช้ (จากที่ไหนก็ได้):
-#   sudo /home/url/checkurl-app/Checklink/deploy/deploy.sh
+#   sudo /home/checkurl/Checklink/deploy/deploy.sh
 #
 # ดูว่าจะทำอะไรบ้างโดยไม่แตะของจริง:
-#   DRY_RUN=1 /home/url/checkurl-app/Checklink/deploy/deploy.sh
+#   DRY_RUN=1 /home/checkurl/Checklink/deploy/deploy.sh
 #
 # ------------------------------------------------------------
 # กับดักที่สคริปต์นี้มีไว้กัน:
@@ -20,11 +20,11 @@
 # ============================================================================
 set -euo pipefail
 
-APP_DIR=/home/url/checkurl-app/Checklink/backend
+APP_DIR=/home/checkurl/Checklink/backend
 PY="$APP_DIR/.venv/bin/python"
 SERVICE=phishing-checker
 SITE=https://checkurl.studiodup.com
-BACKUP_DIR=/home/url/checkurl-app
+BACKUP_DIR=/home/checkurl
 
 step() { printf '\n\033[1m==> %s\033[0m\n' "$1"; }
 fail() { printf '\033[31m!! %s\033[0m\n' "$1" >&2; exit 1; }
@@ -32,8 +32,8 @@ fail() { printf '\033[31m!! %s\033[0m\n' "$1" >&2; exit 1; }
 cd "$APP_DIR"
 
 step "1/6 โค้ดที่กำลังจะ deploy"
-git -c safe.directory=/home/url/checkurl-app/Checklink log --oneline -1 || true
-if ! git -c safe.directory=/home/url/checkurl-app/Checklink diff --quiet 2>/dev/null; then
+git -c safe.directory=/home/checkurl/Checklink log --oneline -1 || true
+if ! git -c safe.directory=/home/checkurl/Checklink diff --quiet 2>/dev/null; then
     echo "   (มีไฟล์ที่แก้แล้วแต่ยังไม่ commit — deploy ได้ แต่ถ้าพังจะย้อนกลับยาก)"
 fi
 
@@ -86,6 +86,6 @@ R2=$(systemctl show "$SERVICE" -p NRestarts --value)
 
 printf '\n\033[32m✓ deploy สำเร็จ\033[0m  %s ตอบ 200 และ service นิ่งดี\n' "$SITE"
 echo "  ถ้าพบปัญหาทีหลัง ย้อนกลับด้วย:"
-echo "    cd /home/url/checkurl-app/Checklink && git -c safe.directory=\$PWD reset --hard <commit เดิม>"
+echo "    cd /home/checkurl/Checklink && git -c safe.directory=\$PWD reset --hard <commit เดิม>"
 echo "    cp $BACKUP $APP_DIR/instance/app.db   # เฉพาะกรณีข้อมูลเสียหาย"
 echo "    sudo systemctl restart $SERVICE"

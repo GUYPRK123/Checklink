@@ -104,7 +104,7 @@ function layer4HTML(res) {
 function deepCheckUpsellHTML(res) {
   const dc = res.deep_check;
   if (!dc || dc.ran !== false || !dc.locked_reason) return "";
-  const cta = dc.locked_reason === "login_required"
+  const cta = (dc.locked_reason === "login_required" || dc.locked_reason === "anon_quota_exhausted")
     ? `<a class="btn secondary" href="account.html">เข้าสู่ระบบ/สมัครฟรี</a>`
     : `<a class="btn secondary" href="premium.html">อัพเกรดพรีเมียม</a>`;
   return `<div class="upsell">
@@ -192,6 +192,117 @@ function techHTML(res) {
     <div class="techbox">${refBox}${kv}</div></details>`;
 }
 
+// ---------------------------------------------------------------------------
+// ไทม์ไลน์เส้นทางการตรวจ 4 ชั้น — สร้างจาก "ข้อมูลจริง" ใน response เท่านั้น
+// จุดประสงค์: ให้ผู้ใช้เห็นว่าการตรวจผ่านชั้นไหนบ้าง จบที่ชั้นไหน และชั้นไหนถูกข้าม
+// เพราะอะไร (โปร่งใสตามหลักของระบบ ไม่ใช่แค่โชว์ผลสรุปแล้วเงียบ)
+// ---------------------------------------------------------------------------
+function scanTimelineHTML(res) {
+  const v = res.verdict || {};
+  const dc = res.deep_check || {};
+  const dest = res.destination || {};
+  const l4 = res.layer4 || {};
+  const fromBlacklist = v.source === "blacklist";
+  // เหตุผลที่ชั้นลึกถูกข้าม — อิงจาก locked_reason จริงของ backend
+  const skipDetail = ({
+    anon_quota_exhausted: "ข้าม — สิทธิ์ตรวจเชิงลึกฟรีของวันนี้หมดแล้ว (สมัครสมาชิกฟรีเพื่อได้เพิ่ม)",
+    quota_exhausted: "ข้าม — โควตาตรวจเชิงลึกของวันนี้หมดแล้ว (พรีเมียมไม่จำกัด)",
+    login_required: "ข้าม — ต้องล็อกอินเพื่อใช้การตรวจเชิงลึก",
+  })[dc.locked_reason] || "ข้าม — การตรวจเชิงลึกไม่ได้เปิดสำหรับคำขอนี้";
+  const steps = [];
+
+  // ชั้น 1 — บัญชีดำ สกมช.
+  if (fromBlacklist) {
+    steps.push({
+      title: "ชั้น 1 · เทียบบัญชีดำ สกมช.",
+      state: v.color === "red" ? "bad" : "ok",
+      detail: v.color === "red" ? "พบในบัญชีดำ — ตัดสินผลได้ทันที"
+                                : "อยู่ในรายการที่ยืนยันแล้วว่าปลอดภัย — ตัดสินผลได้ทันที",
+    });
+  } else {
+    steps.push({
+      title: "ชั้น 1 · เทียบบัญชีดำ สกมช.",
+      state: "",
+      detail: res.api_checked ? "พบข้อมูลประกอบ แล้ววิเคราะห์สดต่อ"
+                              : "ไม่พบในบัญชีดำ จึงวิเคราะห์สดต่อ",
+    });
+  }
+
+  // ชั้น 2 — วิเคราะห์รูปแบบลิงก์ (รันเสมอเมื่อลิงก์อ่านได้)
+  const nSignals = (res.reasons || []).length;
+  if (v.color === "green" && v.source === "realtime") {
+    steps.push({ title: "ชั้น 2 · วิเคราะห์รูปแบบลิงก์", state: "ok",
+                 detail: "ตรงกับโดเมนทางการของแบรนด์ที่รู้จัก — ยืนยันปลอดภัย" });
+  } else {
+    steps.push({ title: "ชั้น 2 · วิเคราะห์รูปแบบลิงก์",
+                 state: nSignals > 0 && v.color !== "green" ? "warn" : "",
+                 detail: `พบสัญญาณ ${nSignals} รายการ (คะแนนรวม ${res.score})` });
+  }
+
+  // ชั้น 3 — ตามปลายทางจริง (รันเฉพาะการตรวจเชิงลึก)
+  if (dc.ran) {
+    if (dest.blocked) {
+      steps.push({ title: "ชั้น 3 · ตามเส้นทาง redirect", state: "bad",
+                   detail: dest.blocked_reason || "ปลายทางผิดปกติ — หยุดการตามต่อ" });
+    } else if (dest.redirected) {
+      steps.push({ title: "ชั้น 3 · ตามเส้นทาง redirect", state: "",
+                   detail: `เปลี่ยนหน้า ${dest.hops} ครั้ง — ปลายทางจริงถูกนำไปวิเคราะห์ซ้ำ` });
+    } else {
+      steps.push({ title: "ชั้น 3 · ตามเส้นทาง redirect", state: "",
+                   detail: "ไม่มีการ redirect — ปลายทางคือลิงก์ที่วางโดยตรง" });
+    }
+  } else {
+    steps.push({ title: "ชั้น 3 · ตามเส้นทาง redirect", state: "muted",
+                 detail: skipDetail });
+  }
+
+  // ชั้น 4 — อายุโดเมน / SSL / เนื้อหาเว็บ
+  if (l4.ran) {
+    const parts = [
+      (l4.domain_age || {}).checked ? "อายุโดเมน" : null,
+      (l4.ssl || {}).checked ? "ใบรับรอง SSL" : null,
+      l4.content_checked ? (l4.page_source === "sandbox"
+        ? "เนื้อหาเว็บ (รัน JavaScript ใน sandbox)" : "เนื้อหาเว็บ") : null,
+    ].filter(Boolean);
+    steps.push({ title: "ชั้น 4 · ตรวจเชิงลึกภายนอก", state: "",
+                 detail: parts.length ? `ตรวจแล้ว: ${parts.join(" / ")}`
+                                      : "พยายามตรวจแล้ว แต่ปลายทางไม่ตอบ (ไม่นับเป็นความเสี่ยง)" });
+  } else if (dc.ran) {
+    steps.push({ title: "ชั้น 4 · ตรวจเชิงลึกภายนอก", state: "muted",
+                 detail: "ข้าม — ชั้นก่อนหน้าให้ผลชัดเจนแล้ว ไม่จำเป็นต้องตรวจต่อ" });
+  } else {
+    steps.push({ title: "ชั้น 4 · ตรวจเชิงลึกภายนอก", state: "muted",
+                 detail: skipDetail });
+  }
+
+  // ทำเครื่องหมาย "จุดสิ้นสุดการตรวจ" ที่ชั้นสุดท้ายที่ได้ทำงานจริง
+  const lastRan = [...steps].reverse().find(s => s.state !== "muted");
+  if (lastRan) lastRan.end = true;
+
+  const rows = steps.map(s => `
+    <div class="tl-step ${s.state}">
+      <span class="tl-dot"></span>
+      <span class="tl-body">
+        <span class="tl-title">${esc(s.title)}${s.end ? '<span class="tl-end">จุดสิ้นสุดการตรวจ</span>' : ""}</span>
+        <span class="tl-detail">${esc(s.detail)}</span>
+      </span>
+    </div>`).join("");
+
+  // ผลจากแคช: backend ส่ง cached/cached_age_sec มาตลอดแต่ไม่เคยถูกแสดง —
+  // การบอกตรง ๆ ว่า "นี่คือผลเดิมที่เพิ่งตรวจไป" ทำให้ผลซ้ำไม่ดูเป็นความผิดปกติ
+  const cacheNote = res.cached
+    ? `<div class="tl-cache">ผลจากแคช — ลิงก์นี้เพิ่งถูกตรวจเมื่อ ${esc(res.cached_age_sec)} วินาทีก่อน
+       ระบบใช้ผลเดิมแทนการตรวจซ้ำ (ผลใหม่จะตรวจสดอีกครั้งเมื่อแคชหมดอายุ)</div>`
+    : "";
+
+  return `<div class="timeline">
+    <div class="a-label">เส้นทางการตรวจ 4 ชั้น — จบที่ไหน เพราะอะไร</div>
+    ${rows}
+    <div class="tl-foot">ใช้เวลาตรวจ ${esc(res.elapsed_ms)} ms${res.cached ? " (จากแคช)" : ""}</div>
+    ${cacheNote}
+  </div>`;
+}
+
 // แสดงผลลงใน element ที่กำหนด
 export function renderResult(container, res) {
   if (!res.ok) {
@@ -210,6 +321,7 @@ export function renderResult(container, res) {
         <div><div class="v-word">${esc(v.label)}</div><div class="v-sub">${esc(v.headline)}</div></div>
       </div>
       <p class="v-msg">${esc(v.message)}</p>
+      ${scanTimelineHTML(res)}
       ${deepCheckUpsellHTML(res)}
       ${anatomyHTML(res.anatomy, bad)}
       ${destinationHTML(res.destination)}
@@ -222,4 +334,42 @@ export function renderResult(container, res) {
 
 export function renderLoading(container, text) {
   container.innerHTML = `<div class="card"><div class="loading"><span class="spin"></span> ${esc(text || "กำลังตรวจสอบ...")}</div></div>`;
+}
+
+// ---------------------------------------------------------------------------
+// สถานะระหว่างรอสแกน: ไล่ขั้น 4 ชั้นให้เห็นว่าระบบกำลังทำอะไร
+// จังหวะเวลาเป็น "ภาพประกอบ" (ฝั่งเซิร์ฟเวอร์ตอบเป็นก้อนเดียว ไม่มี progress จริง
+// ระหว่างทาง) จึงมีข้อความกำกับไว้ตรง ๆ และสรุปจริงต่อชั้นจะแสดงในไทม์ไลน์ของผลตรวจ
+// คืน { stop } ให้ผู้เรียกยกเลิก timer เมื่อผลมาถึงแล้ว
+// ---------------------------------------------------------------------------
+const SCAN_STEPS = [
+  "เทียบบัญชีดำของ สกมช.",
+  "วิเคราะห์รูปแบบลิงก์ (แบรนด์ปลอม / สะกดเพี้ยน / homoglyph)",
+  "ตามเส้นทาง redirect หาปลายทางจริง",
+  "ตรวจเชิงลึก: อายุโดเมน / ใบรับรอง SSL / เนื้อหาเว็บ",
+];
+
+export function renderScanProgress(container) {
+  container.innerHTML = `<div class="card">
+    <div class="loading"><span class="spin"></span> กำลังตรวจสอบลิงก์...</div>
+    <div class="scan-steps">
+      ${SCAN_STEPS.map((t, i) => `
+        <div class="scan-step" data-state="pending">
+          <span class="s-dot"></span><span>ชั้น ${i + 1} — ${t}</span>
+        </div>`).join("")}
+    </div>
+    <div class="scan-note">ลำดับที่เห็นเป็นภาพประกอบระหว่างรอ — สรุปจริงของแต่ละชั้นจะแสดงพร้อมผลตรวจ</div>
+  </div>`;
+
+  const steps = [...container.querySelectorAll(".scan-step")];
+  const setState = (i, st) => {
+    const el = steps[i];
+    if (el && el.isConnected) el.dataset.state = st;  // ผลมาก่อน timer -> DOM ถูกแทนที่แล้ว ไม่ต้องทำอะไร
+  };
+  setState(0, "active");
+  // ชั้น 1-2 เร็วมากจริง (in-memory) ชั้น 3-4 คือส่วนที่รอเครือข่าย
+  const plan = [[250, 0, "done"], [250, 1, "active"], [750, 1, "done"],
+                [750, 2, "active"], [2400, 2, "done"], [2400, 3, "active"]];
+  const timers = plan.map(([ms, i, st]) => setTimeout(() => setState(i, st), ms));
+  return { stop: () => timers.forEach(clearTimeout) };
 }

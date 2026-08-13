@@ -73,6 +73,20 @@ def analyze(parsed: dict) -> dict:
             return {"score": 0, "signals": signals,
                     "verified_safe": True, "legit_brand": b["label"]}
 
+    # 0.5) homoglyph: โฮสต์ใช้อักขระต่างภาษาที่หน้าตาเหมือนตัวละตินเพื่อปลอมเป็นแบรนด์
+    # ตรวจพบมาจากชั้น parse (url_parser._homoglyph_brand) — โดเมนแบบนี้แทบไม่มีทาง
+    # เป็นเว็บสุจริต เพราะการจดโดเมนอักขระผสมให้เหมือนแบรนด์คนอื่นคือเจตนาหลอกในตัวเอง
+    hg = parsed.get("homoglyph_brand")
+    if hg:
+        sig = _signal(
+            "homoglyph_brand",
+            f"ตรวจพบความพยายามปลอมแปลง {hg.upper()}",
+            f"ชื่อโดเมน \"{parsed.get('homoglyph_original', '')}\" ใช้ตัวอักษรต่างภาษา"
+            f"ที่หน้าตาเหมือนตัวอักษรปกติเพื่อปลอมเป็น \"{hg}\" "
+            f"ตามองแยกไม่ออก ให้ถือว่าเป็นลิงก์หลอกลวง")
+        sig["brand"] = hg  # ให้ scanner ดึงโดเมนทางการมาแสดงเทียบได้
+        signals.append(sig)
+
     # 1) เลียนแบบแบรนด์: มีชื่อแบรนด์ในลิงก์ แต่โดเมนจริงไม่ใช่ของแบรนด์นั้น
     for b in BRANDS:
         if re.search(r"(^|[^a-z])" + re.escape(b["label"]) + r"([^a-z]|$)", haystack):

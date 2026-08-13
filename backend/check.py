@@ -19,6 +19,7 @@ from concurrent.futures import ThreadPoolExecutor
 from flask import Blueprint, request, jsonify, current_app, Response
 from flask_login import current_user
 
+import anon_quota
 import jobs
 from extensions import db, limiter
 from models import ApiKey, ScanHistory, User
@@ -54,11 +55,33 @@ def _current_actor():
 def _deep_check_decision(user):
     """ตัดสินว่าจะรันการเช็คเชิงลึกให้คำขอนี้ได้ไหม คืน (run_deep, locked_reason)"""
     if user is None:
-        return False, "login_required"
+        # ไม่ล็อกอินก็ตรวจเชิงลึกได้ แต่จำกัดต่อวันต่อ IP (เหตุผลใน anon_quota.py)
+        # หมายเหตุ: สาขานี้ถูกเรียกเฉพาะใน request จริงเสมอ (งาน bulk เบื้องหลัง
+        # เป็นของสมาชิกพรีเมียมเท่านั้น user ไม่มีทางเป็น None ที่นั่น)
+        if anon_quota.allow(request.remote_addr):
+            return True, None
+        return False, "anon_quota_exhausted"
     limit = current_app.config["FREE_DEEP_CHECKS_PER_DAY"]
     if user.can_run_deep_check(limit):
         return True, None
     return False, "quota_exhausted"
+
+
+def _locked_deep_check_payload(locked_reason: str) -> dict:
+    """ก้อน deep_check ที่บอกผู้ใช้ว่าการตรวจเชิงลึกถูกล็อกเพราะอะไร + ทางไปต่อ
+    (รวมไว้ที่เดียว — เดิมข้อความชุดนี้ถูกก๊อปไว้สองที่ใน api_check และ QR)"""
+    limit = current_app.config["FREE_DEEP_CHECKS_PER_DAY"]
+    if locked_reason == "anon_quota_exhausted":
+        msg = (f"ใช้สิทธิ์ตรวจเชิงลึกฟรีแบบไม่ล็อกอิน {anon_quota.LIMIT} ครั้ง/วันครบแล้ว "
+               f"สมัครสมาชิกฟรีเพื่อได้ {limit} ครั้ง/วัน")
+    elif locked_reason == "login_required":
+        # เกิดได้เมื่อปิดโควตาผู้ไม่ล็อกอิน (ANON_DEEP_CHECKS_PER_DAY=0)
+        msg = ("สมัครสมาชิกฟรีเพื่อปลดล็อกการตรวจเชิงลึก (ตาม redirect, "
+               "อายุโดเมน, SSL, เนื้อหาเว็บจริง)")
+    else:
+        msg = (f"ใช้โควตาการตรวจเชิงลึกฟรี {limit} ครั้ง/วันหมดแล้ว "
+               "อัพเกรดเป็นพรีเมียมเพื่อตรวจเชิงลึกไม่จำกัด")
+    return {"ran": False, "locked_reason": locked_reason, "message": msg}
 
 
 def _save_history(user, result: dict, ran_deep: bool,
@@ -117,20 +140,16 @@ def api_check():
     if not result.get("ok"):
         return jsonify(result)
 
-    if run_deep and user is not None:
-        user.record_deep_check()
-        db.session.commit()
+    if run_deep:
+        if user is not None:
+            user.record_deep_check()
+            db.session.commit()
+        else:
+            anon_quota.record(request.remote_addr)
     _save_history(user, result, run_deep)
 
     if locked_reason:
-        limit = current_app.config["FREE_DEEP_CHECKS_PER_DAY"]
-        result["deep_check"] = {
-            "ran": False, "locked_reason": locked_reason,
-            "message": ("สมัครสมาชิกฟรีเพื่อปลดล็อกการตรวจเชิงลึก (ตาม redirect, "
-                        "อายุโดเมน, SSL, เนื้อหาเว็บจริง)" if locked_reason == "login_required"
-                        else f"ใช้โควตาการตรวจเชิงลึกฟรี {limit} ครั้ง/วันหมดแล้ว "
-                             "อัพเกรดเป็นพรีเมียมเพื่อตรวจเชิงลึกไม่จำกัด"),
-        }
+        result["deep_check"] = _locked_deep_check_payload(locked_reason)
     return jsonify(result)
 
 
@@ -174,18 +193,16 @@ def _analyze_qr_payload(payload: str, user, thumb: str = None, save: bool = True
         run_deep, locked_reason = _deep_check_decision(user)
         scan_result = scan(payload, run_deep=run_deep)
         if scan_result.get("ok"):
-            if run_deep and user is not None:
-                user.record_deep_check()
-                db.session.commit()
+            if run_deep:
+                if user is not None:
+                    user.record_deep_check()
+                    db.session.commit()
+                else:
+                    # ถึงตรงนี้ได้เฉพาะจาก /api/check/qr (มี request จริงเสมอ) —
+                    # งาน bulk เบื้องหลังเป็นของพรีเมียม user ไม่มีทางเป็น None
+                    anon_quota.record(request.remote_addr)
             if locked_reason:
-                limit = current_app.config["FREE_DEEP_CHECKS_PER_DAY"]
-                scan_result["deep_check"] = {
-                    "ran": False, "locked_reason": locked_reason,
-                    "message": ("สมัครสมาชิกฟรีเพื่อปลดล็อกการตรวจเชิงลึก (ตาม redirect, "
-                                "อายุโดเมน, SSL, เนื้อหาเว็บจริง)" if locked_reason == "login_required"
-                                else f"ใช้โควตาการตรวจเชิงลึกฟรี {limit} ครั้ง/วันหมดแล้ว "
-                                     "อัพเกรดเป็นพรีเมียมเพื่อตรวจเชิงลึกไม่จำกัด"),
-                }
+                scan_result["deep_check"] = _locked_deep_check_payload(locked_reason)
             if save:
                 _save_history(user, scan_result, run_deep,
                               source="qr", qr_type="url", qr_thumb=thumb)
@@ -398,4 +415,5 @@ def api_history_export():
 def health():
     """เช็กว่าเซิร์ฟเวอร์ยังอยู่ + ตัวเลขสุขภาพระบบ (ไม่มีข้อมูลผู้ใช้ จึงเปิดให้ทุกคนดูได้)"""
     return jsonify({"ok": True, "service": "phishing-link-checker",
-                    "scan_cache": scan_cache.stats(), "bulk_jobs": jobs.stats()})
+                    "scan_cache": scan_cache.stats(), "bulk_jobs": jobs.stats(),
+                    "anon_quota": anon_quota.stats()})

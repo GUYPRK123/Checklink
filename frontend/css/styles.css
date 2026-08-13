@@ -329,3 +329,36 @@ details.tech>summary::-webkit-details-marker{display:none}
 textarea.bulk-input{width:100%; min-height:110px; font-family:"IBM Plex Mono",monospace; font-size:.9rem;
   padding:12px 13px; border:1.5px solid var(--line); border-radius:11px; background:#fbfcfe; color:var(--ink);
   resize:vertical}
+
+/* ---------- ขั้นตอนระหว่างรอสแกน (renderScanProgress) ---------- */
+.scan-steps{margin-top:12px; display:flex; flex-direction:column; gap:9px}
+.scan-step{display:flex; align-items:center; gap:10px; font-size:.87rem; color:var(--muted)}
+.scan-step .s-dot{width:15px; height:15px; border-radius:50%; flex:0 0 auto;
+  border:2.5px solid var(--line); transition:border-color .2s, background .2s}
+.scan-step[data-state="active"]{color:var(--ink)}
+.scan-step[data-state="active"] .s-dot{border-color:var(--brand); border-top-color:transparent;
+  animation:rot .8s linear infinite}
+.scan-step[data-state="done"]{color:var(--ink)}
+.scan-step[data-state="done"] .s-dot{background:var(--green-edge); border-color:var(--green-edge)}
+.scan-note{margin-top:11px; font-size:.78rem; color:var(--muted)}
+
+/* ---------- ไทม์ไลน์เส้นทางการตรวจ (scanTimelineHTML) ---------- */
+.timeline{margin-top:14px; border:1px solid var(--line); background:rgba(255,255,255,.6);
+  border-radius:10px; padding:12px 14px}
+.tl-step{display:flex; gap:10px; align-items:flex-start; padding:6px 0}
+.tl-step + .tl-step{border-top:1px dashed var(--line)}
+.tl-dot{width:10px; height:10px; border-radius:3px; flex:0 0 auto; margin-top:5px; background:#1f2a44}
+.tl-step.bad .tl-dot{background:var(--red)}
+.tl-step.warn .tl-dot{background:var(--amber-edge)}
+.tl-step.ok .tl-dot{background:var(--green-edge)}
+.tl-step.muted{color:var(--muted)}
+.tl-step.muted .tl-dot{background:#c3cadd}
+.tl-body{display:flex; flex-direction:column; gap:2px; min-width:0}
+.tl-title{font-size:.85rem; font-weight:600}
+.tl-step.muted .tl-title{font-weight:500}
+.tl-detail{font-size:.8rem; color:var(--muted); overflow-wrap:anywhere}
+.tl-end{display:inline-block; margin-left:8px; padding:1px 8px; border-radius:99px;
+  font-size:.7rem; font-weight:600; background:#1f2a44; color:#fff; vertical-align:1px}
+.tl-foot{margin-top:9px; font-size:.76rem; color:var(--muted)}
+.tl-cache{margin-top:8px; padding:8px 10px; border-radius:8px; font-size:.8rem;
+  background:#eef2f9; border:1px dashed var(--line); color:var(--ink)}

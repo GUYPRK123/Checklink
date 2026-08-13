@@ -37,7 +37,7 @@ from urllib.parse import urlsplit
 from .destination_checker import _resolve_safe_ips
 
 MAX_BYTES = 512 * 1024   # 512KB พอสำหรับ head+body ส่วนต้น ไม่ต้องโหลดทั้งหน้า
-TIMEOUT = 5              # วินาที
+TIMEOUT = (5, 10)        # (connect, read) วินาที — เหตุผลเดียวกับ destination_checker.py
 USER_AGENT = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
               "(KHTML, like Gecko) Chrome/124.0 Safari/537.36 checker-bot/1.0")
 
