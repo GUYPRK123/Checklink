@@ -21,6 +21,13 @@ _HAS_SCHEME = re.compile(r"^[a-zA-Z][a-zA-Z0-9+.\-]*://")
 # host แล้วเติม "http://" นำหน้าจนพังรูปแบบ (เจอตอน content_checker.py ส่ง href/action
 # ของ <link>/<form> ที่ผู้เขียนหน้าเว็บใส่มาเป็น data: URI เข้ามา parse)
 _HAS_NON_WEB_SCHEME = re.compile(r"^[a-zA-Z][a-zA-Z0-9+.\-]*:(?!//)")
+_SCHEME_PREFIX = re.compile(r"^([a-zA-Z][a-zA-Z0-9+.\-]*):")
+
+# scheme ที่ "ตัวลิงก์เองคือโค้ด" — กดแล้วทำงานทันทีโดยไม่มีการเปิดเว็บใด ๆ
+# javascript:/vbscript: = รันสคริปต์ในหน้าปัจจุบัน (ขโมย session/เปลี่ยนหน้าได้ทันที)
+# data: = ฝังทั้งหน้าเว็บ (มัก base64) มาในตัวลิงก์ ไม่มีโดเมนให้ตรวจสอบ/ขึ้นบัญชีดำ
+# ต่างจาก mailto:/tel: ที่แค่ "ไม่ใช่ลิงก์เว็บ" — พวกนี้ต้องเตือนแดง ไม่ใช่ตอบว่าอ่านไม่ได้
+DANGEROUS_SCHEMES = {"javascript", "data", "vbscript"}
 
 # ---------------------------------------------------------------------------
 # homoglyph: ตัวอักษรต่างภาษาที่หน้าตาเหมือนตัวละติน (Unicode confusables)
@@ -78,9 +85,16 @@ def parse_url(raw: str) -> dict:
         return {"valid": False, "raw": raw}
 
     text = raw.strip()
+
+    # scheme อันตรายต้องจับ "ก่อน" ทุกอย่าง (รวมแบบเขียน javascript://... ก็นับ)
+    # หมายเหตุ: regex นี้ match "example.com:8080" ด้วย จึงต้องเช็กกับเซ็ตก่อนเชื่อ
+    m = _SCHEME_PREFIX.match(text)
+    if m and m.group(1).lower() in DANGEROUS_SCHEMES:
+        return {"valid": False, "raw": text, "dangerous_scheme": m.group(1).lower()}
+
     has_scheme = bool(_HAS_SCHEME.match(text))
     if not has_scheme and _HAS_NON_WEB_SCHEME.match(text):
-        return {"valid": False, "raw": text}  # data:/javascript:/mailto: ฯลฯ ไม่ใช่ลิงก์เว็บ
+        return {"valid": False, "raw": text}  # mailto:/tel: ฯลฯ ไม่ใช่ลิงก์เว็บ (แต่ไม่อันตราย)
     work = text if has_scheme else "http://" + text
 
     try:

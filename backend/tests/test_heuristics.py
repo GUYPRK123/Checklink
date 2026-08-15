@@ -136,3 +136,75 @@ class Testการรวมคะแนน:
         """เว็บทั่วไปที่ระบบไม่รู้จักควรลงเอยเป็น "เหลือง" ไม่ใช่ "แดง" """
         result = analyze(parse_url("https://somerandomblog.org/article/1"))
         assert result["score"] < 6
+
+
+class Testแยกน้ำหนักตามตำแหน่งที่พบชื่อแบรนด์:
+    """ชื่อแบรนด์ในโฮสต์ = เจตนาปลอม / ใน path = เว็บข่าวก็ทำ / โดเมนชื่อแบรนด์เป๊ะ
+    บน TLD ที่ไม่รู้จัก = ตัดสินจากชื่อไม่ได้ — สามกรณีนี้ต้องได้คนละสัญญาณ"""
+
+    def test_แบรนด์ในโฮสต์ยังเป็นimpersonation(self):
+        assert "brand_impersonation" in signal_ids("https://facebook-security-alert.com/")
+
+    def test_แบรนด์ในpathเป็นแค่ข้อสังเกตไม่ใช่critical(self):
+        result = analyze(parse_url("https://www.bbc.com/news/technology-apple-iphone-review"))
+        ids = {s["id"] for s in result["signals"]}
+        assert "brand_in_path" in ids
+        assert "brand_impersonation" not in ids
+        assert not any(s["severity"] == "critical" for s in result["signals"])
+
+    def test_เว็บสารานุกรมพูดถึงแบรนด์ต้องไม่แดง(self):
+        result = analyze(parse_url("https://en.wikipedia.org/wiki/PayPal"))
+        assert not any(s["severity"] == "critical" for s in result["signals"])
+        assert result["score"] < 6
+
+    def test_โดเมนชื่อแบรนด์เป๊ะบนTLDนอกลิสต์ได้bare_domain(self):
+        result = analyze(parse_url("https://amazon.xyz/"))
+        ids = {s["id"] for s in result["signals"]}
+        assert "brand_bare_domain" in ids
+        assert "brand_impersonation" not in ids
+
+
+class Testจับแบรนด์ผ่านalias:
+    """มิจฉาชีพใช้ชื่อเต็ม/ชื่อผลิตภัณฑ์ที่คนจำได้ ไม่ใช่ label สั้น ๆ ของเรา"""
+
+    def test_ชื่อเต็มธนาคารไทย(self):
+        assert "brand_impersonation" in signal_ids("https://kasikorn-bank-verify.com/login")
+        assert "brand_impersonation" in signal_ids("https://krungthai-update.top/otp")
+        assert "brand_impersonation" in signal_ids("https://scbeasy-net.com/login")
+
+    def test_ชื่อผลิตภัณฑ์สากล(self):
+        assert "brand_impersonation" in signal_ids("https://icloud-verify.com/")
+        assert "brand_impersonation" in signal_ids("https://outlook-security.net/")
+
+    def test_โดเมนจริงที่เพิ่มใหม่ต้องได้เขียว(self):
+        assert analyze(parse_url("https://login.microsoftonline.com/x"))["verified_safe"] is True
+        assert analyze(parse_url("https://www.amazon.co.jp/dp/B0"))["verified_safe"] is True
+
+
+class Testtyposquattingต้องไม่กินคำสามัญ:
+    """แบรนด์ชื่อสั้น (4 ตัว) มีคำจริงที่ห่างแค่ 1 ตัวอักษรเยอะมาก
+    tree~true, lime~line, zoo~zoom เคยขึ้นแดงทั้งที่เป็นเว็บปกติ"""
+
+    def test_คำสามัญใกล้แบรนด์สั้นไม่โดน(self):
+        assert "typosquatting" not in signal_ids("https://www.tree.com/")
+        assert "typosquatting" not in signal_ids("https://www.lime.com/")
+        assert "typosquatting" not in signal_ids("https://www.zoo.org/")
+
+    def test_แบรนด์ยาวสะกดเพี้ยนยังโดน(self):
+        assert "typosquatting" in signal_ids("https://gooogle.com/")
+
+    def test_แบรนด์สั้นที่ใช้เลขแทนตัวอักษรยังโดน(self):
+        """glyph_same ไม่เกี่ยวกับเกณฑ์ความยาว — l1ne ต้องโดนเสมอ"""
+        assert "typosquatting" in signal_ids("https://l1ne.me.evil.com/") or \
+               "typosquatting" in signal_ids("https://l1ne.com/")
+
+
+class Testคำล่อแบบมีขอบเขตคำ:
+    def test_คำสามัญที่มีคำล่อฝังในตัวไม่โดน(self):
+        """win ใน windows, free ใน freedom — substring เดิมกินหมด"""
+        assert "lure_keyword" not in signal_ids("https://www.windows.com/download")
+        assert "lure_keyword" not in signal_ids("https://freedomhouse.org/")
+
+    def test_คำล่อคั่นด้วยขีดหรือทับยังโดน(self):
+        assert "lure_keyword" in signal_ids("https://unknown-site.org/verify-account/")
+        assert "lure_keyword" in signal_ids("https://example.org/login")

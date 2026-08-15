@@ -41,6 +41,25 @@ def _normalize(raw: str) -> str:
     return text if _HAS_SCHEME.match(text) else "http://" + text
 
 
+def _final_response_facts(resp, final_url: str) -> dict:
+    """สรุป "ข้อเท็จจริง" ของ response ปลายทาง (ไม่ตัดสินอะไร — scanner เป็นคนตัดสิน)
+    ใช้ดูว่ากดลิงก์แล้วจะ "ได้ไฟล์" แทนที่จะเปิดหน้าเว็บหรือไม่ และไฟล์ชื่อ/ชนิดอะไร"""
+    content_type = (resp.headers.get("Content-Type") or "").split(";")[0].strip().lower()
+    disposition = resp.headers.get("Content-Disposition") or ""
+    filename = ""
+    m = re.search(r"filename\*?=(?:UTF-8'')?\"?([^\";]+)", disposition, re.IGNORECASE)
+    if m:
+        filename = m.group(1).strip()
+    if not filename:
+        # ไม่มีชื่อใน header -> ใช้ชื่อไฟล์ท้าย path ของ URL ปลายทาง
+        filename = urlsplit(final_url).path.rsplit("/", 1)[-1]
+    return {
+        "content_type": content_type,
+        "attachment": "attachment" in disposition.lower(),
+        "filename": filename,
+    }
+
+
 def _is_blocked_ip(ip_str: str) -> bool:
     """True ถ้าเป็น IP ที่ไม่ควรให้ backend ยิงเข้าไปหา (วง internal/สงวนไว้)"""
     try:
@@ -90,6 +109,7 @@ def resolve_destination(raw_url: str) -> dict:
 
     current = _normalize(raw_url)
     chain = [current]
+    final_resp = None  # response ของ hop สุดท้ายที่ไม่ใช่ redirect (ไว้ดูว่าปลายทางคือไฟล์ไหม)
 
     for hop in range(MAX_HOPS):
         parts = urlsplit(current)
@@ -132,7 +152,11 @@ def resolve_destination(raw_url: str) -> dict:
             chain.append(next_url)
             current = next_url
             continue
+        final_resp = resp
         break
 
-    return {"resolved": True, "chain": chain, "final_url": current,
-            "hops": len(chain) - 1}
+    result = {"resolved": True, "chain": chain, "final_url": current,
+              "hops": len(chain) - 1}
+    if final_resp is not None:
+        result["final_response"] = _final_response_facts(final_resp, current)
+    return result

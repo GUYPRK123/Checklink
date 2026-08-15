@@ -36,7 +36,9 @@ from .heuristics import analyze
 from .destination_checker import resolve_destination
 from .domain_intel import analyze_domain_intel
 from .content_checker import analyze_content
-from .config import RED_SCORE, YELLOW_SCORE, BRANDS, TLD_INFO, RISKY_TLDS, WEIGHTS
+from .config import (RED_SCORE, YELLOW_SCORE, BRANDS, TLD_INFO, RISKY_TLDS, WEIGHTS,
+                     EXECUTABLE_EXTENSIONS, ARCHIVE_EXTENSIONS,
+                     APK_CONTENT_TYPE, EXECUTABLE_CONTENT_TYPES)
 
 
 def _verdict(color, label, headline, message, source):
@@ -126,19 +128,57 @@ def build_reference(analysis: dict):
     return None
 
 
+def _make_signal(key: str, title: str, detail: str) -> dict:
+    points, severity = WEIGHTS[key]
+    return {"id": key, "title": title, "detail": detail,
+            "points": points, "severity": severity}
+
+
+def _download_signal(destination: dict):
+    """ถ้าปลายทางจริง "ส่งไฟล์" แทนหน้าเว็บ -> คืนสัญญาณตามความอันตรายของไฟล์
+    ตัดสินจากข้อเท็จจริงที่ชั้น 3 เก็บมา (Content-Type / Content-Disposition / ชื่อไฟล์)
+    ไม่ใช่จากชื่อในลิงก์ — ชื่อในลิงก์ปลอมได้ แต่ header ตอนส่งไฟล์จริงปลอมยากกว่ามาก"""
+    facts = destination.get("final_response")
+    if not facts:
+        return None
+    ct = facts.get("content_type", "")
+    filename = facts.get("filename", "") or ""
+    ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
+
+    if ext == "apk" or ct == APK_CONTENT_TYPE:
+        return _make_signal(
+            "instant_download_apk", "กดแล้วดาวน์โหลดไฟล์ติดตั้งแอป Android ทันที",
+            f"ปลายทางส่งไฟล์ \"{filename or 'ไม่ทราบชื่อ'}\" (.apk) ทันทีที่เปิด "
+            "การหลอกให้ติดตั้งแอปนอก Play Store คือวิธีหลักของแก๊งแอปดูดเงิน "
+            "ห้ามติดตั้งเด็ดขาด")
+    if ext in EXECUTABLE_EXTENSIONS or ct in EXECUTABLE_CONTENT_TYPES:
+        return _make_signal(
+            "instant_download_exe", "กดแล้วดาวน์โหลดไฟล์ที่รันได้ทันที",
+            f"ปลายทางส่งไฟล์ \"{filename or 'ไม่ทราบชื่อ'}\" ซึ่งเป็นไฟล์โปรแกรม "
+            "ทันทีที่เปิดลิงก์ ถ้าไม่ได้ตั้งใจดาวน์โหลดโปรแกรมจากผู้ให้บริการที่รู้จัก "
+            "อย่าเปิดไฟล์นี้")
+    if facts.get("attachment") and ext in ARCHIVE_EXTENSIONS:
+        return _make_signal(
+            "instant_download_archive", "กดแล้วดาวน์โหลดไฟล์บีบอัดทันที",
+            f"ปลายทางส่งไฟล์ \"{filename or 'ไม่ทราบชื่อ'}\" ให้ดาวน์โหลดทันที "
+            "ไฟล์บีบอัดถูกใช้ห่อไฟล์อันตรายเพื่อหลบระบบสแกนบ่อย ๆ")
+    return None
+
+
 def _destination_signals(destination: dict) -> list:
-    """สัญญาณที่เกิดจากตัวการ redirect เอง (ไม่ใช่จากการวิเคราะห์ปลายทางซ้ำ)
-    ตอนนี้มีกรณีเดียว: ปลายทางชี้ไปยัง IP ภายในเครือข่าย ซึ่งเว็บทั่วไปไม่ทำแบบนี้
-    และเป็นสัญญาณของการโจมตีแบบ SSRF/พยายามหลบระบบตรวจ ถือว่าอันตรายชัดเจน"""
-    if not destination.get("blocked"):
-        return []
-    points, severity = WEIGHTS["internal_redirect"]
-    return [{
-        "id": "internal_redirect",
-        "title": "ลิงก์ redirect ไปยังที่อยู่ผิดปกติ",
-        "detail": destination.get("blocked_reason", "ปลายทางชี้ไปยัง IP ที่สงวนไว้"),
-        "points": points, "severity": severity,
-    }]
+    """สัญญาณที่เกิดจากพฤติกรรมของปลายทางเอง (ไม่ใช่จากการวิเคราะห์ URL ปลายทางซ้ำ):
+    1) redirect ไปยัง IP ภายในเครือข่าย = สัญญาณ SSRF/หลบการตรวจ อันตรายชัดเจน
+    2) ปลายทางส่งไฟล์ทันทีที่เปิด (ดู _download_signal)"""
+    if destination.get("blocked"):
+        points, severity = WEIGHTS["internal_redirect"]
+        return [{
+            "id": "internal_redirect",
+            "title": "ลิงก์ redirect ไปยังที่อยู่ผิดปกติ",
+            "detail": destination.get("blocked_reason", "ปลายทางชี้ไปยัง IP ที่สงวนไว้"),
+            "points": points, "severity": severity,
+        }]
+    dl = _download_signal(destination)
+    return [dl] if dl else []
 
 
 def _merge_destination_analysis(final_analysis: dict) -> list:
@@ -226,12 +266,55 @@ def scan(url: str, run_deep: bool = True) -> dict:
     return result
 
 
+_DANGEROUS_SCHEME_TEXT = {
+    "javascript": ("ตัวลิงก์นี้คือโค้ดสคริปต์ ไม่ใช่ที่อยู่เว็บ",
+                   "ลิงก์ขึ้นต้นด้วย javascript: แปลว่ามันคือชุดคำสั่งที่จะทำงานทันทีที่กด "
+                   "โดยไม่เปิดเว็บใด ๆ ใช้ขโมยบัญชี/สวมรอยหน้าที่เปิดอยู่ได้ ห้ามกดเด็ดขาด"),
+    "vbscript": ("ตัวลิงก์นี้คือโค้ดสคริปต์ ไม่ใช่ที่อยู่เว็บ",
+                 "ลิงก์ขึ้นต้นด้วย vbscript: เป็นชุดคำสั่งที่ทำงานทันทีที่กด ห้ามกดเด็ดขาด"),
+    "data": ("ลิงก์ฝังหน้าเว็บแอบแฝงมาในตัวมันเอง",
+             "ลิงก์ data: บรรจุเนื้อหาทั้งหน้ามาในตัวลิงก์เลย ไม่มีโดเมนให้ตรวจสอบหรือ"
+             "แจ้งปิดได้ เป็นเทคนิคซ่อนหน้าฟิชชิ่งไม่ให้ระบบตรวจเจอ ห้ามกดเด็ดขาด"),
+}
+
+
+def _dangerous_scheme_result(url: str, scheme: str, started: float) -> dict:
+    """ผลตรวจสำหรับลิงก์ที่ "ตัวมันเองคือโค้ด" — ฟันแดงได้ทันทีโดยไม่ต้องใช้เน็ตเลย
+    โครงผลลัพธ์ครบชุดเหมือน scan ปกติ (ส่วนที่ไม่มีข้อมูลปล่อยว่าง frontend ข้ามให้เอง)"""
+    headline, message = _DANGEROUS_SCHEME_TEXT[scheme]
+    points, severity = WEIGHTS["script_scheme"]
+    signal = {"id": "script_scheme",
+              "title": f"ลิงก์เป็นโค้ด {scheme}: ไม่ใช่ที่อยู่เว็บ",
+              "detail": message, "points": points, "severity": severity}
+    return {
+        "ok": True,
+        "input": url,
+        "verdict": _verdict("red", "อันตราย", headline, message, "realtime"),
+        "anatomy": {},
+        "destination": build_destination_view(
+            {"resolved": False, "chain": [url], "final_url": url, "hops": 0}),
+        "layer4": {"ran": False, "domain_age": {"checked": False},
+                   "ssl": {"checked": False}, "content_checked": False,
+                   "content_facts": [], "combos_hit": [], "page_source": ""},
+        "reference": None,
+        "reasons": [signal],
+        "score": points,
+        "elapsed_ms": max(1, round((time.perf_counter() - started) * 1000)),
+        "api_checked": False,
+        "deep_check": {"ran": False},
+    }
+
+
 def _scan_uncached(url: str, run_deep: bool = True) -> dict:
     """ตัวตรวจจริง — ไม่ผ่านแคช (แยกไว้เพื่อให้เทสต์/บังคับตรวจใหม่เรียกตรงได้)"""
     started = time.perf_counter()
 
     parsed = parse_url(url)
     if not parsed.get("valid"):
+        # ลิงก์ที่เป็นโค้ด (javascript:/data:) ไม่ใช่ "อ่านไม่ได้" แต่คือหลักฐานอันตราย
+        # ที่ชัดที่สุดแล้ว — ตอบเป็นคำเตือนแดงเต็มรูปแบบแทน error
+        if parsed.get("dangerous_scheme"):
+            return _dangerous_scheme_result(url, parsed["dangerous_scheme"], started)
         return {"ok": False, "error": "อ่านลิงก์ไม่ได้ กรุณาตรวจรูปแบบลิงก์",
                 "input": url}
 

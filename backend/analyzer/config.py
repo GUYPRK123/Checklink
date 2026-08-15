@@ -10,15 +10,21 @@ config.py
 # โดเมนจริงของแบรนด์ (สากล + ไทย)
 #   label   = ชื่อที่คนใช้เรียก (ใช้จับการเลียนแบบ/สะกดเพี้ยน)
 #   domains = โดเมนทางการทั้งหมดของแบรนด์ (ต้องเก็บให้ครบเพื่อกัน false positive)
+#   aliases = ชื่ออื่นที่คนรู้จักแบรนด์นี้ (ชื่อเต็ม/ชื่อผลิตภัณฑ์) ใช้จับการเลียนแบบ
+#             เพิ่มจาก label เช่น "kasikorn-bank-verify.com" ไม่มีคำว่า kbank
+#             แต่คนไทยจำธนาคารด้วยคำว่า kasikorn — ต้องจับได้เหมือนกัน
 # ---------------------------------------------------------------------------
 BRANDS = [
-    {"label": "google",    "domains": ["google.com", "google.co.th", "youtube.com", "gmail.com"]},
+    {"label": "google",    "domains": ["google.com", "google.co.th", "youtube.com", "gmail.com"],
+     "aliases": ["youtube", "gmail"]},
     {"label": "facebook",  "domains": ["facebook.com", "fb.com", "messenger.com"]},
     {"label": "instagram", "domains": ["instagram.com"]},
     {"label": "line",      "domains": ["line.me", "linecorp.com"]},
-    {"label": "microsoft", "domains": ["microsoft.com", "live.com", "outlook.com", "office.com"]},
-    {"label": "apple",     "domains": ["apple.com", "icloud.com"]},
-    {"label": "amazon",    "domains": ["amazon.com"]},
+    {"label": "microsoft", "domains": ["microsoft.com", "live.com", "outlook.com", "office.com",
+                                        "microsoftonline.com"],
+     "aliases": ["outlook", "hotmail", "office365"]},
+    {"label": "apple",     "domains": ["apple.com", "icloud.com"], "aliases": ["icloud"]},
+    {"label": "amazon",    "domains": ["amazon.com", "amazon.co.jp"]},
     {"label": "netflix",   "domains": ["netflix.com"]},
     {"label": "paypal",    "domains": ["paypal.com"]},
     {"label": "shopee",    "domains": ["shopee.co.th", "shopee.com"]},
@@ -67,16 +73,18 @@ BRANDS = [
     {"label": "kerry",     "domains": ["kerryexpress.com", "th.kerryexpress.com"]},
     {"label": "thailandpost", "domains": ["thailandpost.co.th", "thailandpost.com"]},
     # ---- ธนาคาร / บริการในไทย ----
-    {"label": "scb",       "domains": ["scb.co.th", "scbeasy.com"]},
-    {"label": "kbank",     "domains": ["kasikornbank.com", "kbank.co.th", "kasikorn.com"]},
-    {"label": "ktb",       "domains": ["krungthai.com", "ktb.co.th"]},
-    {"label": "bbl",       "domains": ["bangkokbank.com"]},
+    {"label": "scb",       "domains": ["scb.co.th", "scbeasy.com"], "aliases": ["scbeasy"]},
+    {"label": "kbank",     "domains": ["kasikornbank.com", "kbank.co.th", "kasikorn.com"],
+     "aliases": ["kasikorn", "kplus"]},
+    {"label": "ktb",       "domains": ["krungthai.com", "ktb.co.th"], "aliases": ["krungthai"]},
+    {"label": "bbl",       "domains": ["bangkokbank.com"], "aliases": ["bangkokbank"]},
     {"label": "krungsri",  "domains": ["krungsri.com"]},
     {"label": "ttb",       "domains": ["ttbbank.com"]},
     {"label": "gsb",       "domains": ["gsb.or.th"]},
     {"label": "baac",      "domains": ["baac.or.th"]},
     {"label": "promptpay", "domains": ["promptpay.io"]},
-    {"label": "true",      "domains": ["true.th", "truecorp.co.th", "trueid.net"]},
+    {"label": "true",      "domains": ["true.th", "truecorp.co.th", "trueid.net", "truemoney.com"],
+     "aliases": ["truemoney"]},
     {"label": "ais",       "domains": ["ais.th", "ais.co.th"]},
     {"label": "dtac",      "domains": ["dtac.co.th"]},
 ]
@@ -127,6 +135,23 @@ SHORTENERS = {
     "rebrand.ly", "cutt.ly", "shorturl.at", "lin.ee", "s.id", "rb.gy",
 }
 
+# นามสกุลไฟล์ที่ "รันหรือติดตั้งได้" — ลิงก์ที่ปลายทางเป็นไฟล์พวกนี้ = กดแล้วได้
+# ไฟล์อันตรายทันที (.apk แยกไปให้น้ำหนักหนักกว่าใน WEIGHTS เพราะเป็นรูปแบบ
+# "แอปดูดเงิน" ที่มิจฉาชีพไทยใช้จริง — แอป Android ปกติมาจาก Play Store ไม่ใช่ลิงก์แชต)
+EXECUTABLE_EXTENSIONS = {
+    "apk", "exe", "msi", "scr", "bat", "cmd", "ps1", "jar", "vbs", "hta", "pif",
+}
+# ไฟล์บีบอัด/อิมเมจที่นิยมใช้ห่อมัลแวร์หลบระบบสแกน
+ARCHIVE_EXTENSIONS = {"zip", "rar", "7z", "iso", "img"}
+
+# ประเภทเนื้อหา (Content-Type) ที่บ่งบอกไฟล์รันได้ — ใช้คู่กับนามสกุลไฟล์
+# เพราะบางเซิร์ฟเวอร์ตั้งชื่อไฟล์เนียน ๆ แต่ Content-Type โกหกไม่ได้ง่ายเท่า
+APK_CONTENT_TYPE = "application/vnd.android.package-archive"
+EXECUTABLE_CONTENT_TYPES = {
+    "application/x-msdownload", "application/x-dosexec",
+    "application/x-executable", "application/x-msi", "application/java-archive",
+}
+
 # คำล่อที่มักโผล่ในลิงก์หลอก
 LURE_KEYWORDS = [
     "login", "signin", "logon", "verify", "verifi", "secure", "account",
@@ -140,7 +165,17 @@ LURE_KEYWORDS = [
 # severity: critical / high / medium / low / good
 # ---------------------------------------------------------------------------
 WEIGHTS = {
+    # brand_impersonation = ชื่อแบรนด์อยู่ใน "โฮสต์" ของโดเมนที่ไม่ใช่ของแบรนด์
+    # (เช่น facebook-security-alert.com) เว็บสุจริตแทบไม่มีเหตุผลตั้งชื่อโฮสต์แบบนี้
     "brand_impersonation": (6, "critical"),
+    # brand_in_path = ชื่อแบรนด์โผล่ใน "path" เท่านั้น (เช่น /news/apple-iphone)
+    # เว็บข่าว/บล็อก/วิกิพูดถึงแบรนด์ใน path เป็นเรื่องปกติมาก จึงเป็นแค่ข้อสังเกต
+    # แต่ถ้าหน้านั้นขอรหัสผ่านด้วย combo ด้านล่างจะดันคะแนนขึ้น
+    "brand_in_path":       (2, "medium"),
+    # brand_bare_domain = โดเมนคือชื่อแบรนด์เป๊ะ ๆ แต่ TLD ไม่อยู่ในลิสต์ทางการ
+    # (เช่น amazon.co.jp ของจริงที่ลิสต์เราไม่ครบ vs amazon.xyz ของปลอม)
+    # ตัดสินจากชื่ออย่างเดียวไม่ได้ ให้ระดับกลางแล้วพึ่งสัญญาณอื่นร่วมตัดสิน
+    "brand_bare_domain":   (3, "high"),
     "typosquatting":       (6, "critical"),
     "ip_host":             (5, "critical"),
     "userinfo_at":         (5, "critical"),
@@ -155,6 +190,16 @@ WEIGHTS = {
     "no_https":            (1, "low"),
     "weird_port":          (2, "medium"),
     "long_url":            (1, "low"),
+
+    # ---- ลิงก์ที่ "อันตรายทันทีที่กด" ----
+    "script_scheme":       (6, "critical"),  # ตัวลิงก์คือโค้ด (javascript:/data:/vbscript:)
+    "script_in_params":    (5, "critical"),  # โค้ดสคริปต์ซ่อนในพารามิเตอร์ (ลิงก์ยิง XSS)
+    "executable_in_path":  (2, "medium"),    # path ชี้ไปไฟล์รันได้ (ยืนยันจริงอีกทีชั้น 3)
+    # สามตัวล่างตัดสินจาก Content-Type/Content-Disposition ของปลายทางจริง (ชั้น 3)
+    "instant_download_apk":     (6, "critical"),  # กดแล้วได้ไฟล์ .apk ทันที = สูตรแอปดูดเงิน
+    "instant_download_exe":     (4, "high"),      # กดแล้วได้ไฟล์รันได้ทันที (มีเว็บ download
+                                                  # จริงอยู่บ้าง จึงไม่ฟันแดงเดี่ยว ๆ)
+    "instant_download_archive": (2, "medium"),    # กดแล้วได้ไฟล์บีบอัดทันที
 
     # ---- ชั้นที่ 4 (เสริม): อายุโดเมน (RDAP) + ใบรับรอง SSL ----
     "domain_very_new":     (6, "critical"),  # จดทะเบียนมาไม่ถึง 7 วัน
@@ -222,6 +267,22 @@ COMBO_RULES = [
         "title": "หน้าขอรหัสผ่านที่ซ่อนโค้ดการทำงานไว้",
         "detail": "หน้าล็อกอินจริงไม่มีเหตุผลต้องซ่อนว่าโค้ดของตัวเองทำอะไรกับรหัสผ่าน"
                   "ที่ผู้ใช้พิมพ์",
+    },
+    {
+        "id": "combo_bare_brand_password",
+        "needs": {"brand_bare_domain", "has_password_input"},
+        "bonus": 3,
+        "title": "โดเมนใช้ชื่อแบรนด์บนนามสกุลที่ไม่ใช่ทางการ และหน้าขอรหัสผ่าน",
+        "detail": "ถ้าเป็นโดเมนภูมิภาคของแบรนด์จริง หน้าล็อกอินมักถูกยืนยันจากลิสต์ทางการ"
+                  "ไปแล้ว การขอรหัสผ่านบนโดเมนชื่อแบรนด์ที่ระบบไม่รู้จักจึงน่าสงสัยเป็นพิเศษ",
+    },
+    {
+        "id": "combo_brand_path_password",
+        "needs": {"brand_in_path", "has_password_input"},
+        "bonus": 4,
+        "title": "ลิงก์อ้างชื่อแบรนด์ใน path และหน้าปลายทางขอรหัสผ่าน",
+        "detail": "ชื่อแบรนด์ใน path เฉย ๆ เจอได้ทั่วไปในเว็บข่าว/บทความ แต่เมื่อหน้า"
+                  "นั้นขอรหัสผ่านด้วยทั้งที่โดเมนไม่ใช่ของแบรนด์ คือรูปแบบหน้าหลอกขโมยบัญชี",
     },
     {
         "id": "combo_hidden_brand_password",

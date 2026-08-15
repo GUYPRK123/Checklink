@@ -25,6 +25,8 @@ content_checker.py
 ต้องติดตั้ง beautifulsoup4 (ดู requirements.txt) ถ้ายังไม่มีจะข้ามชั้นนี้ไปเงียบ ๆ
 (เหมือนกับที่ระบบข้ามชั้นบัญชีดำไปได้ถ้า requests ไม่มี)
 """
+from datetime import datetime, timezone
+
 from . import sandbox_fetch
 from .content_analyzer import analyze_page
 from .page_fetch import fetch_page
@@ -67,7 +69,12 @@ def analyze_content(url: str, page_registrable: str, allow_sandbox: bool = False
     result = analyze_page(bundle, page_registrable)
 
     if allow_sandbox and sandbox_fetch.is_configured() and _worth_sandbox(result):
+        # log แค่เวลา ไม่ log URL — คงแนวทางเดียวกับ sandbox_server ที่ไม่เก็บข้อมูลผู้ใช้
+        print(f"[sandbox] {datetime.now(timezone.utc).isoformat(timespec='seconds')} "
+              "ส่งหน้าเข้า sandbox", flush=True)
         sb_bundle = sandbox_fetch.fetch_page(url)
+        print(f"[sandbox] {datetime.now(timezone.utc).isoformat(timespec='seconds')} "
+              f"ผล: {'สำเร็จ' if sb_bundle['ok'] else 'ล้มเหลว'}", flush=True)
         if sb_bundle["ok"]:
             sb_result = analyze_page(sb_bundle, page_registrable)
             if sb_result["checked"]:
