@@ -53,14 +53,13 @@ function renderPlanStatus(status) {
   const el = document.getElementById("plan-status");
   if (status.is_premium) {
     el.innerHTML = `<div class="a-tag ok"><span class="dot"></span>
-      สมาชิกพรีเมียม — ใช้ได้ถึง ${new Date(status.premium_until).toLocaleDateString("th-TH")} (เช็คเชิงลึกไม่จำกัด)</div>`;
+      สมาชิกพรีเมียม — ใช้ได้ถึง ${new Date(status.premium_until).toLocaleDateString("th-TH")} (ตรวจเชิงลึกไม่จำกัด)</div>`;
     return;
   }
-  const pct = Math.round((status.deep_checks_remaining / status.free_daily_limit) * 100);
   el.innerHTML = `
-    <div class="a-tag"><span class="dot"></span> แผนฟรี — เช็คเชิงลึกเหลือวันนี้
-      <strong style="margin:0 4px">${status.deep_checks_remaining}</strong> / ${status.free_daily_limit} ครั้ง</div>
-    <div class="quota-bar"><div class="quota-bar-fill" style="width:${pct}%"></div></div>
+    <div class="a-tag ok"><span class="dot"></span> แผนฟรี — ตรวจลิงก์และ QR ได้ไม่จำกัด</div>
+    <div class="a-tag muted"><span class="dot"></span> การตรวจเชิงลึก (ตาม redirect / อายุโดเมนและข้อมูลจดทะเบียน /
+      ใบรับรอง SSL / เนื้อหาเว็บและสคริปต์ซ่อน) เป็นฟีเจอร์พรีเมียม</div>
     <div class="input-row" style="margin-top:12px">
       <a class="btn" href="premium.html" style="width:100%; text-align:center">อัพเกรดเป็นพรีเมียม</a>
     </div>`;

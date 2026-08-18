@@ -61,6 +61,20 @@ function layer4HTML(res) {
       ? `จดทะเบียนเมื่อ ${age.registered_on} (${age.age_days} วันก่อน) — ยังใหม่มาก`
       : `จดทะเบียนมาแล้ว ${age.age_days} วัน (ตั้งแต่ ${age.registered_on})`;
     rows.push(["อายุโดเมน (วันที่จดทะเบียน)", state, text]);
+
+    // ข้อมูลการจดทะเบียนเพิ่มเติมจาก RDAP — เป็นข้อมูลประกอบ ไม่ใช่สัญญาณเสี่ยง
+    // สามกรณีของ "ผู้ถือครอง": เปิดเผยชื่อ / มีตัวตนแต่เลือกปิด (registrant_private,
+    // ปกติของโดเมนยุคปัจจุบันตามนโยบายความเป็นส่วนตัว) / registry ไม่ให้ข้อมูลเลย
+    // (.com/.net เป็นแบบ thin) — สองกรณีหลังต้องอธิบายต่างกัน ไม่ให้ผู้ใช้ตีความผิด
+    const regParts = [];
+    if (age.registrar) regParts.push(`จดผ่านนายทะเบียน ${age.registrar}`);
+    if (age.registrant) regParts.push(`ผู้ถือครอง: ${age.registrant}`);
+    else if (age.registrant_private) regParts.push("ผู้ถือครองเลือกไม่เปิดเผยชื่อ (นโยบายความเป็นส่วนตัว — ปกติของโดเมนทั่วไป)");
+    else regParts.push("นายทะเบียนไม่เปิดเผยข้อมูลผู้ถือครอง");
+    if (age.expires_on) regParts.push(`หมดอายุ ${age.expires_on}`);
+    if (age.registrar || age.registrant || age.expires_on) {
+      rows.push(["ข้อมูลจดทะเบียน (RDAP)", "", regParts.join(" · ")]);
+    }
   } else {
     rows.push(["อายุโดเมน (วันที่จดทะเบียน)", "muted", "เช็กไม่ได้ตอนนี้ (นามสกุลนี้ไม่รองรับ หรือเครือข่ายมีปัญหา)"]);
   }
@@ -104,12 +118,28 @@ function layer4HTML(res) {
 function deepCheckUpsellHTML(res) {
   const dc = res.deep_check;
   if (!dc || dc.ran !== false || !dc.locked_reason) return "";
+  // การตรวจเชิงลึกเป็นของพรีเมียม (premium_required) — ค่าเก่าอื่นเก็บไว้เผื่อ
+  // response ที่ค้างจากเวอร์ชันก่อน จะได้ไม่พาไปหน้าที่ผิด
   const cta = (dc.locked_reason === "login_required" || dc.locked_reason === "anon_quota_exhausted")
     ? `<a class="btn secondary" href="account.html">เข้าสู่ระบบ/สมัครฟรี</a>`
     : `<a class="btn secondary" href="premium.html">อัพเกรดพรีเมียม</a>`;
   return `<div class="upsell">
     <p>${esc(dc.message)}</p>
     ${cta}
+  </div>`;
+}
+
+// แถบบอกสิทธิ์คงเหลือของผู้ไม่ล็อกอิน — backend แนบ anon_quota มากับผลตรวจ
+// เฉพาะคำขอที่ไม่ได้ล็อกอินเท่านั้น บอกตรง ๆ ว่าเหลือกี่ครั้งจะได้ไม่โดนล็อกแบบไม่รู้ตัว
+function anonQuotaHTML(res) {
+  const q = res.anon_quota;
+  if (!q || typeof q.remaining !== "number") return "";
+  const urgent = q.remaining <= 1;
+  return `<div class="upsell">
+    <p>${urgent ? "⚠︎ " : ""}สิทธิ์ตรวจฟรีแบบไม่ล็อกอินวันนี้เหลือ
+      <strong>${q.remaining} / ${q.limit}</strong> ครั้ง (รีเซ็ตพรุ่งนี้)
+      — สมัครสมาชิกฟรีเพื่อตรวจได้ไม่จำกัด</p>
+    <a class="btn secondary" href="account.html?mode=register">สมัครสมาชิกฟรี</a>
   </div>`;
 }
 
@@ -205,7 +235,9 @@ function scanTimelineHTML(res) {
   const fromBlacklist = v.source === "blacklist";
   // เหตุผลที่ชั้นลึกถูกข้าม — อิงจาก locked_reason จริงของ backend
   const skipDetail = ({
-    anon_quota_exhausted: "ข้าม — สิทธิ์ตรวจเชิงลึกฟรีของวันนี้หมดแล้ว (สมัครสมาชิกฟรีเพื่อได้เพิ่ม)",
+    premium_required: "ข้าม — การตรวจเชิงลึก (ชั้น 3-4) เป็นฟีเจอร์ของสมาชิกพรีเมียม",
+    // ค่าเก่าจากเวอร์ชันก่อน เก็บไว้เผื่อ response ค้างแคช/แท็บเก่า
+    anon_quota_exhausted: "ข้าม — สิทธิ์ตรวจเชิงลึกฟรีของวันนี้หมดแล้ว",
     quota_exhausted: "ข้าม — โควตาตรวจเชิงลึกของวันนี้หมดแล้ว (พรีเมียมไม่จำกัด)",
     login_required: "ข้าม — ต้องล็อกอินเพื่อใช้การตรวจเชิงลึก",
   })[dc.locked_reason] || "ข้าม — การตรวจเชิงลึกไม่ได้เปิดสำหรับคำขอนี้";
@@ -323,6 +355,7 @@ export function renderResult(container, res) {
       <p class="v-msg">${esc(v.message)}</p>
       ${scanTimelineHTML(res)}
       ${deepCheckUpsellHTML(res)}
+      ${anonQuotaHTML(res)}
       ${anatomyHTML(res.anatomy, bad)}
       ${destinationHTML(res.destination)}
       ${layer4HTML(res)}

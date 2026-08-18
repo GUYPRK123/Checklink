@@ -2,11 +2,18 @@
 import { checkUrl } from "../api.js";
 import { renderResult, renderScanProgress } from "./resultCard.js";
 
+// ตัวอย่างครอบคลุมกลไกตรวจจับหลักของระบบคนละแบบ — ทุกลิงก์อันตรายเป็นลิงก์สมมติ
+// ที่แต่งขึ้นให้เข้ารูปแบบที่ระบบจับได้ ไม่ใช่เว็บอันตรายจริง (ยกเว้นลิงก์ธนาคารจริง)
+// สี่ตัวอย่างท้ายถูกตัดสินได้จากชั้น 1-2 แบบออฟไลน์ จึงไม่เปลืองโควตาตรวจเชิงลึก
 const EXAMPLES = [
   { label: "ลิงก์จริงของธนาคาร", url: "https://www.scb.co.th/personal-banking.html" },
   { label: "ลิงก์ปลอมเลียนแบบ", url: "http://scb-secure-login.xyz/verify?id=88421" },
   { label: "โดเมนสะกดเพี้ยน", url: "https://www.g00gle-account.com/signin" },
   { label: "ใช้เลข IP", url: "http://203.150.18.44/kbank/update.php" },
+  { label: "อักษรเลียนแบบสายตา", url: "https://ѕcb.co.th/promo" },
+  { label: "ลิงก์ javascript: ฝังโค้ด", url: "javascript:document.location='http://attacker.example'" },
+  { label: "สคริปต์แฝงในพารามิเตอร์", url: "http://lucky-prize.top/claim?msg=<script>alert(1)</script>" },
+  { label: "หลอกโหลดแอป .apk", url: "http://krungthai-verify.top/app/KTB-NextGen.apk" },
 ];
 
 export function mountLinkChecker(panel, resultEl) {

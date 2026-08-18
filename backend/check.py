@@ -2,7 +2,8 @@
 """
 check.py
 Blueprint หลักของฟีเจอร์ตรวจลิงก์ (ย้ายมาจาก app.py เดิม) + ฟีเจอร์ที่ผูกกับแผนสมาชิก:
-  - จำกัดการเช็คเชิงลึก (ชั้น 3-4) ตามแผน/โควตา ต้องล็อกอินก่อนถึงจะใช้ได้เลย
+  - ไม่ล็อกอิน: ตรวจชั้น 1-2 ได้ ANON_CHECKS_PER_DAY ครั้ง/วัน/IP (ดู anon_quota.py)
+  - ล็อกอินฟรี: ตรวจชั้น 1-2 ไม่จำกัด / พรีเมียม: ได้การตรวจเชิงลึก (ชั้น 3-4) เพิ่ม
   - /api/check/bulk        เช็คหลายลิงก์พร้อมกัน (พรีเมียมเท่านั้น)
   - /api/history            ประวัติการตรวจของผู้ใช้ที่ล็อกอิน
   - /api/history/export     export ประวัติเป็น CSV (พรีเมียมเท่านั้น)
@@ -53,35 +54,42 @@ def _current_actor():
 
 
 def _deep_check_decision(user):
-    """ตัดสินว่าจะรันการเช็คเชิงลึกให้คำขอนี้ได้ไหม คืน (run_deep, locked_reason)"""
-    if user is None:
-        # ไม่ล็อกอินก็ตรวจเชิงลึกได้ แต่จำกัดต่อวันต่อ IP (เหตุผลใน anon_quota.py)
-        # หมายเหตุ: สาขานี้ถูกเรียกเฉพาะใน request จริงเสมอ (งาน bulk เบื้องหลัง
-        # เป็นของสมาชิกพรีเมียมเท่านั้น user ไม่มีทางเป็น None ที่นั่น)
-        if anon_quota.allow(request.remote_addr):
-            return True, None
-        return False, "anon_quota_exhausted"
-    limit = current_app.config["FREE_DEEP_CHECKS_PER_DAY"]
-    if user.can_run_deep_check(limit):
+    """ตัดสินว่าจะรันการเช็คเชิงลึกให้คำขอนี้ได้ไหม คืน (run_deep, locked_reason)
+
+    กติกาปัจจุบัน: การตรวจเชิงลึก (ชั้น 3-4: ตาม redirect / อายุโดเมน / SSL /
+    เนื้อหาเว็บและสคริปต์ซ่อน) เป็นของสมาชิกพรีเมียมเท่านั้น — ผู้ไม่ล็อกอินและ
+    สมาชิกฟรีได้ชั้น 1-2 ซึ่งตัดสินได้ทันทีโดยไม่ยิงเครือข่ายออก"""
+    if user is not None and user.is_premium:
         return True, None
-    return False, "quota_exhausted"
+    return False, "premium_required"
 
 
 def _locked_deep_check_payload(locked_reason: str) -> dict:
-    """ก้อน deep_check ที่บอกผู้ใช้ว่าการตรวจเชิงลึกถูกล็อกเพราะอะไร + ทางไปต่อ
-    (รวมไว้ที่เดียว — เดิมข้อความชุดนี้ถูกก๊อปไว้สองที่ใน api_check และ QR)"""
-    limit = current_app.config["FREE_DEEP_CHECKS_PER_DAY"]
-    if locked_reason == "anon_quota_exhausted":
-        msg = (f"ใช้สิทธิ์ตรวจเชิงลึกฟรีแบบไม่ล็อกอิน {anon_quota.LIMIT} ครั้ง/วันครบแล้ว "
-               f"สมัครสมาชิกฟรีเพื่อได้ {limit} ครั้ง/วัน")
-    elif locked_reason == "login_required":
-        # เกิดได้เมื่อปิดโควตาผู้ไม่ล็อกอิน (ANON_DEEP_CHECKS_PER_DAY=0)
-        msg = ("สมัครสมาชิกฟรีเพื่อปลดล็อกการตรวจเชิงลึก (ตาม redirect, "
-               "อายุโดเมน, SSL, เนื้อหาเว็บจริง)")
-    else:
-        msg = (f"ใช้โควตาการตรวจเชิงลึกฟรี {limit} ครั้ง/วันหมดแล้ว "
-               "อัพเกรดเป็นพรีเมียมเพื่อตรวจเชิงลึกไม่จำกัด")
+    """ก้อน deep_check ที่บอกผู้ใช้ว่าการตรวจเชิงลึกถูกล็อกเพราะอะไร + ทางไปต่อ"""
+    msg = ("การตรวจเชิงลึก (ตาม redirect, อายุโดเมนและข้อมูลจดทะเบียน, ใบรับรอง SSL, "
+           "เนื้อหาเว็บจริงและสคริปต์ที่ซ่อนอยู่) เป็นฟีเจอร์ของสมาชิกพรีเมียม")
     return {"ran": False, "locked_reason": locked_reason, "message": msg}
+
+
+def _anon_gate():
+    """ด่านโควตารวมของผู้ไม่ล็อกอิน (นับทุกการตรวจ ทั้งลิงก์และ QR — เหตุผลใน
+    anon_quota.py) คืน error response ถ้าสิทธิ์วันนี้หมดแล้ว หรือ None ถ้ายังไปต่อได้"""
+    if anon_quota.allow(request.remote_addr):
+        return None
+    msg = (f"ใช้สิทธิ์ตรวจฟรีแบบไม่ล็อกอิน {anon_quota.LIMIT} ครั้ง/วันของวันนี้ครบแล้ว "
+           "จะตรวจได้อีกครั้งพรุ่งนี้ — สมัครสมาชิกฟรีเพื่อตรวจได้ไม่จำกัด")
+    return jsonify({"ok": False, "error": msg, "quota_exhausted": True}), 429
+
+
+def _attach_anon_quota(result: dict) -> dict:
+    """หักสิทธิ์ผู้ไม่ล็อกอิน 1 ครั้ง แล้วแนบยอดคงเหลือไปกับผลตรวจให้หน้าเว็บแสดง
+    คืน "สำเนา" ของ result — ห้ามเขียนคีย์รายคำขอลงก้อนเดิม เพราะผลตรวจถูกแชร์
+    ผ่าน scan_cache ให้คำขออื่นด้วย"""
+    anon_quota.record(request.remote_addr)
+    result = dict(result)
+    result["anon_quota"] = {"remaining": anon_quota.remaining(request.remote_addr),
+                            "limit": anon_quota.LIMIT}
+    return result
 
 
 def _save_history(user, result: dict, ran_deep: bool,
@@ -134,21 +142,22 @@ def api_check():
         return jsonify({"ok": False, "error": "กรุณาส่งลิงก์ที่ต้องการตรวจ"}), 400
 
     user, via_api_key = _current_actor()
+    if user is None:
+        gate = _anon_gate()
+        if gate:
+            return gate
     run_deep, locked_reason = _deep_check_decision(user)
 
     result = scan(url, run_deep=run_deep)
     if not result.get("ok"):
         return jsonify(result)
 
-    if run_deep:
-        if user is not None:
-            user.record_deep_check()
-            db.session.commit()
-        else:
-            anon_quota.record(request.remote_addr)
     _save_history(user, result, run_deep)
+    if user is None:
+        result = _attach_anon_quota(result)
 
     if locked_reason:
+        result = dict(result)  # กันเขียนทับก้อนที่แชร์ใน scan_cache (เหตุผลใน _attach_anon_quota)
         result["deep_check"] = _locked_deep_check_payload(locked_reason)
     return jsonify(result)
 
@@ -193,19 +202,13 @@ def _analyze_qr_payload(payload: str, user, thumb: str = None, save: bool = True
         run_deep, locked_reason = _deep_check_decision(user)
         scan_result = scan(payload, run_deep=run_deep)
         if scan_result.get("ok"):
-            if run_deep:
-                if user is not None:
-                    user.record_deep_check()
-                    db.session.commit()
-                else:
-                    # ถึงตรงนี้ได้เฉพาะจาก /api/check/qr (มี request จริงเสมอ) —
-                    # งาน bulk เบื้องหลังเป็นของพรีเมียม user ไม่มีทางเป็น None
-                    anon_quota.record(request.remote_addr)
-            if locked_reason:
-                scan_result["deep_check"] = _locked_deep_check_payload(locked_reason)
             if save:
                 _save_history(user, scan_result, run_deep,
                               source="qr", qr_type="url", qr_thumb=thumb)
+            if locked_reason:
+                # copy กันเขียนทับก้อนที่แชร์ใน scan_cache (เหตุผลใน _attach_anon_quota)
+                scan_result = dict(scan_result)
+                scan_result["deep_check"] = _locked_deep_check_payload(locked_reason)
     elif save and user is not None:
         # QR ที่ไม่ใช่ลิงก์ก็ควรอยู่ในประวัติด้วย — ใช้คำเตือนที่แรงที่สุดเป็นสีของรายการ
         color = _warnings_color(qr["warnings"])
@@ -234,8 +237,16 @@ def api_check_qr():
         return jsonify({"ok": False, "error": "ไม่พบเนื้อหาใน QR ที่ส่งมา"}), 400
 
     user, _ = _current_actor()
+    if user is None:
+        gate = _anon_gate()
+        if gate:
+            return gate
     thumb = _clean_thumb(data.get("thumb")) if (user is not None and user.is_premium) else None
-    return jsonify(_analyze_qr_payload(payload, user, thumb=thumb))
+    result = _analyze_qr_payload(payload, user, thumb=thumb)
+    if user is None:
+        # QR ที่ไม่ใช่ลิงก์ก็นับสิทธิ์ด้วย — งานที่ทำจริงคือการจำแนก+เตือนเหมือนกัน
+        result = _attach_anon_quota(result)
+    return jsonify(result)
 
 
 def _premium_gate(error_message: str):

@@ -1,8 +1,9 @@
 # -*- coding: utf-8 -*-
 """
-test_anon_quota.py — เทสต์โควตาตรวจเชิงลึกต่อ IP ของผู้ไม่ล็อกอิน
+test_anon_quota.py — เทสต์โควตาการตรวจรายวันต่อ IP ของผู้ไม่ล็อกอิน
+(นับรวมทุกการตรวจ ทั้งลิงก์และ QR — ดูกติกาเต็มในหัวไฟล์ anon_quota.py)
 
-จุดที่พังแล้วเจ็บ: ถ้านับพลาด ผู้ไม่ล็อกอินอาจตรวจเชิงลึกได้ไม่จำกัด (เครื่องโดนใช้เป็น
+จุดที่พังแล้วเจ็บ: ถ้านับพลาด ผู้ไม่ล็อกอินอาจตรวจได้ไม่จำกัด (เครื่องโดนใช้เป็น
 ตัวสแกนฟรีจนอืด) หรือกลับด้าน — ไม่ได้สิทธิ์เลยทั้งที่ควรได้ (ฟีเจอร์ที่ตั้งใจเปิดตายเงียบ)
 เทสต์เป็น pure function ทั้งหมด: ไม่มีเน็ต ไม่มี Flask ไม่มีฐานข้อมูล
 """
@@ -44,11 +45,25 @@ class Testโควตาต่อวัน:
         assert anon_quota._counts[ip] == [date.today(), 1]
 
     def test_ตั้งศูนย์คือปิดฟีเจอร์(self, monkeypatch):
-        """ANON_DEEP_CHECKS_PER_DAY=0 = สวิตช์ถอยกลับพฤติกรรมเดิม (ต้องล็อกอิน)"""
+        """ANON_CHECKS_PER_DAY=0 = ปิดการตรวจแบบไม่ล็อกอิน (ต้องล็อกอินเท่านั้น)"""
         monkeypatch.setattr(anon_quota, "LIMIT", 0)
         assert anon_quota.allow("198.51.100.7") is False
         anon_quota.record("198.51.100.7")       # ต้องไม่พังและไม่เก็บอะไร
         assert anon_quota.stats()["tracked_ips"] == 0
+        assert anon_quota.remaining("198.51.100.7") == 0
+
+    def test_ยอดคงเหลือ(self, monkeypatch):
+        """remaining() ไว้แสดง "วันนี้เหลืออีกกี่ครั้ง" บนหน้าเว็บ — ต้องลดตามการใช้
+        และไม่ติดลบแม้ตัวนับจะเกินเพดาน (เช่นเพดานถูกปรับลดกลางวัน)"""
+        monkeypatch.setattr(anon_quota, "LIMIT", 2)
+        ip = "198.51.100.10"
+        assert anon_quota.remaining(ip) == 2
+        anon_quota.record(ip)
+        assert anon_quota.remaining(ip) == 1
+        anon_quota.record(ip)
+        assert anon_quota.remaining(ip) == 0
+        anon_quota.record(ip)                   # เกินเพดาน (ไม่ควรเกิดจริง)
+        assert anon_quota.remaining(ip) == 0    # ต้องไม่ติดลบ
 
     def test_ip_ว่างต้องไม่ได้สิทธิ์(self, monkeypatch):
         """fail-closed: ไม่รู้ว่าใครขอ = ไม่ให้ (remote_addr ว่างไม่ควรเกิด แต่กันไว้)"""

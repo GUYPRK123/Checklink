@@ -11,17 +11,32 @@ Frontend เป็น vanilla JS + ES modules ไม่มี build step
 รับ URL เข้ามาแล้ววิเคราะห์ผ่าน **cascade 4 ชั้น** (`backend/analyzer/scanner.py`):
 
 1. เทียบ blocklist ของ สกมช. — cache เป็น `set` + ลงดิสก์ TTL 6 ชม.
-2. วิเคราะห์รูปแบบ URL สด — typosquatting ด้วย Levenshtein + normalize glyph (`g00gle` → `google`)
-3. ตาม redirect หาปลายทางจริง แล้ววนวิเคราะห์ชั้น 1-2 ซ้ำ
-4. อายุโดเมน (RDAP) + SSL cert + เนื้อหาหน้าเว็บ — รันขนาน เฉพาะตอนชั้น 1-3 ยังไม่ฟันธง
+2. วิเคราะห์รูปแบบ URL สดแบบออฟไลน์ — typosquatting ด้วย Levenshtein + normalize
+   glyph (`g00gle` → `google`), โดเมน homoglyph ปลอมแบรนด์ (`ѕcb.co.th` ตัว ѕ
+   ซีริลลิก), ลิงก์อันตรายทันทีที่กด (`javascript:`/`data:`, สคริปต์แฝงใน
+   พารามิเตอร์, ไฟล์ `.apk`/`.exe` ในลิงก์)
+3. ตาม redirect หาปลายทางจริง แล้ววนวิเคราะห์ชั้น 1-2 ซ้ำ + จับปลายทางที่สั่ง
+   ดาวน์โหลดไฟล์ทันที (แพตเทิร์นแอปดูดเงิน)
+4. อายุโดเมน + ข้อมูลจดทะเบียน registrar/ผู้ถือครอง (RDAP) + SSL cert + เนื้อหา
+   หน้าเว็บจริง (ฟอร์มหลอก / แบรนด์แอบอ้าง / สคริปต์อำพราง) — รันขนาน เฉพาะตอน
+   ชั้น 1-3 ยังไม่ฟันธง และถ้าตั้งค่า sandbox ไว้จะเปิดหน้าด้วย Chromium จริง
+   (Playwright, แยกเครื่อง — ดู `sandbox/`) เพื่อเห็นหน้าเว็บ "หลังรัน JavaScript"
 
 **กติกาตัดสิน:** เขียว = ยืนยันว่าปลอดภัยเท่านั้น / แดง = อันตราย / เหลือง = ที่เหลือทั้งหมด (รวม "ไม่รู้จัก")
 
 **โหมดตรวจ QR** อ่าน QR ที่ไม่ใช่ลิงก์ได้ด้วย (`backend/analyzer/qr_payload.py`) — เด่นสุดคือ
 QR พร้อมเพย์: ถอดมาตรฐาน EMVCo แล้วตรวจ CRC-16 ได้โดยไม่ต้องต่อเน็ต ถ้า CRC ไม่ตรง
 แปลว่า QR ถูกแก้ไข รองรับ Wi-Fi / เบอร์โทร / SMS / อีเมล / นามบัตร / พิกัด ด้วย
+QR ที่เป็นลิงก์ถูกส่งเข้า cascade 4 ชั้นเดียวกับโหมดลิงก์ทุกประการ
 
-**ระบบสมาชิก:** free (เช็คเชิงลึก 5 ครั้ง/วัน) / premium (ไม่จำกัด + bulk + export + API key)
+**ระดับการใช้งาน** (ลิงก์และ QR ใช้กติกาเดียวกัน):
+
+| | ตรวจชั้น 1-2 | ตรวจเชิงลึก (ชั้น 3-4) |
+|---|---|---|
+| ไม่ล็อกอิน | `ANON_CHECKS_PER_DAY` ครั้ง/วัน/IP (ค่าเริ่มต้น 5) ครบแล้วล็อกถึงพรุ่งนี้ | — |
+| สมาชิกฟรี | ไม่จำกัด | — |
+| พรีเมียม | ไม่จำกัด | ไม่จำกัด + bulk + export + API key + รายละเอียด QR ชำระเงิน |
+
 การจ่ายเงินเป็น **mock ทั้งหมด** ยังไม่ได้ต่อ payment gateway จริง
 
 ---
@@ -101,7 +116,8 @@ rate limit เห็นผู้ใช้ทุกคนเป็น 127.0.0.1 �
 1. **`SECRET_KEY` ต้องเป็นค่าเดิมตลอด** — อย่าสุ่มใหม่ทุกครั้งที่รัน ไม่งั้น session เก่าถอดรหัสไม่ได้ user ทุกคนหลุด login
 2. **`SESSION_COOKIE_SECURE=false` ตอนเป็น HTTP** — ถ้าลืม ระบบ login จะพังแบบหาสาเหตุยาก (`config.py` ตั้งเป็น `True` อัตโนมัติเมื่อ `FLASK_ENV=production`)
 3. **`python app.py` ผูกกับ `127.0.0.1`** — เข้าจากภายนอกไม่ได้ ต้องใช้ `waitress-serve --host=0.0.0.0` สำหรับ production
-4. **ยังไม่มี HTTPS** — รหัสผ่าน user วิ่งเป็น plain text อย่าให้ใครใช้รหัสผ่านจริง
+4. **เว็บจริงมี HTTPS แล้ว** (certbot ต่ออายุอัตโนมัติ) — แต่ถ้าติดตั้งเครื่องใหม่
+   อย่าเปิดรับผู้ใช้ก่อนมี HTTPS เพราะรหัสผ่านจะวิ่งเป็น plain text
 5. **`CORS_ORIGINS="*"` ตอน production แอปจะไม่ยอมสตาร์ต** — เพราะ `*` คู่กับ cookie login
    เท่ากับให้เว็บใดก็ได้ยิง API แทนผู้ใช้ที่ล็อกอินค้างไว้ ถ้าไม่ต้องใช้ CORS ให้ปล่อยว่าง
 
@@ -109,8 +125,10 @@ rate limit เห็นผู้ใช้ทุกคนเป็น 127.0.0.1 �
 
 ## เทสต์
 
-เทสต์ครอบคลุมส่วนที่เป็น pure function ล้วน (ไม่ยิงเน็ต ไม่แตะฐานข้อมูล) จึงรันจบใน
-ไม่ถึงวินาที — `analyzer/url_parser.py`, `analyzer/heuristics.py`, `analyzer/qr_payload.py`
+เกือบ 300 เทสต์ ครอบคลุมส่วนที่เป็น pure function ล้วน (ไม่ยิงเน็ต ไม่แตะฐานข้อมูล)
+จึงรันจบในไม่กี่วินาที — ตัวแยกส่วน URL, กฎวิเคราะห์ทั้งชุด (รวม homoglyph และลิงก์
+อันตรายทันทีที่กด), ตัวถอด QR, กฎเนื้อหาเว็บ, combo rules, โควตาผู้ไม่ล็อกอิน,
+การแกะข้อมูลจดทะเบียนจาก RDAP และตัวเรียก sandbox
 
 ```bash
 cd backend
@@ -166,7 +184,7 @@ SESSION_COOKIE_SECURE=true   # ตั้งได้ "หลัง" มี HTTPS
 | `BEHIND_PROXY` | - | `false` |
 | `DATABASE_URL` | - | SQLite ที่ `instance/app.db` |
 | `RATELIMIT_STORAGE_URI` | - | `memory://` |
-| `FREE_DEEP_CHECKS_PER_DAY` | - | `5` |
+| `ANON_CHECKS_PER_DAY` | - | `5` (โควตาตรวจ/วัน/IP ของผู้ไม่ล็อกอิน, 0 = ต้องล็อกอิน) |
 | `PREMIUM_PRICE_THB` | - | `99` |
 | `PREMIUM_DURATION_DAYS` | - | `30` |
 | `BULK_CHECK_MAX_URLS` | - | `20` |
@@ -176,6 +194,8 @@ SESSION_COOKIE_SECURE=true   # ตั้งได้ "หลัง" มี HTTPS
 | `SCAN_CACHE_TTL` | - | `900` (0 = ปิดแคช) |
 | `SCAN_CACHE_MAX` | - | `2000` |
 | `WARMUP_URL` | - | `https://example.com` (ว่าง = ปิด) |
+| `SANDBOX_URL` | - | ว่าง = ไม่ใช้ sandbox (อ่าน HTML ดิบอย่างเดียว) |
+| `SANDBOX_TOKEN` / `SANDBOX_TIMEOUT` | - | — / `12` (วินาที) |
 
 ---
 
@@ -183,8 +203,8 @@ SESSION_COOKIE_SECURE=true   # ตั้งได้ "หลัง" มี HTTPS
 
 | Endpoint | ใช้ได้กับ | หมายเหตุ |
 |---|---|---|
-| `POST /api/check` | ทุกคน | body = `{"url": "..."}` — ตอบผลทันที |
-| `POST /api/check/qr` | ทุกคน | body = `{"payload": "<เนื้อหาที่ถอดจาก QR>"}` |
+| `POST /api/check` | ทุกคน | body = `{"url": "..."}` — ผู้ไม่ล็อกอินติดโควตา/วัน (ตอบ 429 เมื่อครบ) |
+| `POST /api/check/qr` | ทุกคน | body = `{"payload": "<เนื้อหาที่ถอดจาก QR>"}` — โควตาเดียวกับ `/api/check` |
 | `POST /api/check/bulk` | พรีเมียม | body = `{"urls": [...]}` — **ตอบ 202 + `job_id`** |
 | `POST /api/check/qr/bulk` | พรีเมียม | body = `{"items": [{"payload": "..."}]}` — **ตอบ 202 + `job_id`** |
 | `GET /api/check/bulk/<job_id>` | เจ้าของงาน | ถามความคืบหน้า/ผลของงาน bulk |
@@ -225,16 +245,21 @@ thread ของ waitress ไว้ 1 เส้นจากไม่กี่เ
 Checklink/
 ├─ backend/
 │  ├─ app.py              # จุดเริ่ม Flask (สร้างแอป + เสิร์ฟ frontend)
+│  ├─ serve.py            # จุดเริ่มตอน production (waitress หลัง Nginx)
 │  ├─ config.py           # อ่านค่าจาก env ทั้งหมด
 │  ├─ auth.py             # สมาชิก/ล็อกอิน
 │  ├─ billing.py          # พรีเมียม (mock)
 │  ├─ check.py            # endpoint การเช็กลิงก์/QR
+│  ├─ anon_quota.py       # โควตาตรวจรายวันต่อ IP ของผู้ไม่ล็อกอิน
+│  ├─ jobs.py             # คิวงาน bulk เบื้องหลัง
 │  ├─ models.py           # ตารางฐานข้อมูล
 │  ├─ analyzer/           # หัวใจการวิเคราะห์ (cascade 4 ชั้น + ตัวถอด QR)
 │  ├─ tests/              # เทสต์ pure function (pytest)
 │  └─ requirements.txt
 ├─ frontend/              # vanilla JS + ES modules (ไม่มี build step)
-└─ deploy/                # ตัวอย่าง Nginx + systemd unit
+├─ sandbox/               # บริการเปิดหน้าเว็บด้วย Chromium (Playwright) — แยกเครื่อง
+├─ docs/                  # เอกสารออกแบบ (เช่นกฎวิเคราะห์เนื้อหาเว็บ)
+└─ deploy/                # ตัวอย่าง Nginx + systemd unit + สคริปต์ deploy
 ```
 
 ---

@@ -58,8 +58,6 @@ class Config:
 
     WTF_CSRF_TIME_LIMIT = None  # token อายุเท่ากับ session ไม่หมดอายุแยก
 
-    # โควตาการเช็คเชิงลึกของแผนฟรี (ครั้ง/วัน) — ปรับได้ผ่าน env โดยไม่ต้องแก้โค้ด
-    FREE_DEEP_CHECKS_PER_DAY = int(os.environ.get("FREE_DEEP_CHECKS_PER_DAY", "5"))
     PREMIUM_PRICE_THB = int(os.environ.get("PREMIUM_PRICE_THB", "99"))
     PREMIUM_DURATION_DAYS = int(os.environ.get("PREMIUM_DURATION_DAYS", "30"))
     BULK_CHECK_MAX_URLS = int(os.environ.get("BULK_CHECK_MAX_URLS", "20"))
@@ -74,4 +72,4 @@ class Config:
     #   BULK_JOB_CONCURRENCY / BULK_JOB_TTL      -> jobs.py
     #   WARMUP_URL                                -> app.py
     #   NCSA_BLOCKLIST_URL / NCSA_CACHE_TTL      -> analyzer/blacklist_api.py
-    #   ANON_DEEP_CHECKS_PER_DAY                  -> anon_quota.py
+    #   ANON_CHECKS_PER_DAY                       -> anon_quota.py

@@ -31,9 +31,10 @@ def plans():
             {
                 "id": "free", "name": "ฟรี", "price_thb": 0,
                 "features": [
-                    f"เช็คลิงก์พื้นฐาน (บัญชีดำ + วิเคราะห์รูปแบบ) ไม่จำกัด",
-                    f"เช็คเชิงลึก (ตาม redirect / อายุโดเมน / SSL / เนื้อหาเว็บ) "
-                    f"{cfg['FREE_DEEP_CHECKS_PER_DAY']} ครั้ง/วัน",
+                    "เช็คลิงก์และ QR (บัญชีดำ สกมช. + วิเคราะห์รูปแบบเรียลไทม์) "
+                    "ไม่จำกัดจำนวนครั้ง — ไม่ล็อกอินเช็คได้จำกัดต่อวัน",
+                    "จับลิงก์อันตรายทันทีที่กด: javascript:/data:, สคริปต์แฝงใน"
+                    "พารามิเตอร์, ไฟล์ .apk/.exe, โดเมนอักษรเลียนแบบสายตา",
                     "สแกน QR ได้ทั้งจากกล้อง อัปโหลดรูป และวางภาพที่ก๊อปมา",
                     "อ่าน QR ที่ไม่ใช่ลิงก์ได้ (พร้อมเพย์ / Wi-Fi / เบอร์โทร / SMS) "
                     "พร้อมคำเตือนตามชนิด",
@@ -44,7 +45,9 @@ def plans():
                 "id": "premium", "name": "พรีเมียม", "price_thb": cfg["PREMIUM_PRICE_THB"],
                 "duration_days": cfg["PREMIUM_DURATION_DAYS"],
                 "features": [
-                    "เช็คเชิงลึกไม่จำกัดจำนวนครั้ง",
+                    "การตรวจเชิงลึกไม่จำกัด: ตามเส้นทาง redirect ถึงปลายทางจริง, "
+                    "อายุโดเมนและข้อมูลจดทะเบียน (RDAP), ใบรับรอง SSL, "
+                    "เนื้อหาเว็บจริงและสคริปต์ที่ซ่อนอยู่ (รวม sandbox รัน JavaScript)",
                     f"เช็คแบบ bulk ได้ครั้งละสูงสุด {cfg['BULK_CHECK_MAX_URLS']} ลิงก์",
                     "ดูรายละเอียดเต็มของ QR พร้อมเพย์ (ชื่อผู้รับเงิน จำนวนเงิน "
                     "บัญชีปลายทาง เลขอ้างอิง) ก่อนตัดสินใจโอน",
@@ -62,14 +65,11 @@ def plans():
 @billing_bp.route("/status", methods=["GET"])
 @login_required
 def status():
-    limit = current_app.config["FREE_DEEP_CHECKS_PER_DAY"]
     return jsonify({
         "ok": True,
         "plan": current_user.plan,
         "is_premium": current_user.is_premium,
         "premium_until": current_user.premium_until.isoformat() if current_user.premium_until else None,
-        "deep_checks_remaining": current_user.deep_checks_remaining(limit),
-        "free_daily_limit": limit,
     })
 
 

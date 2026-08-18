@@ -14,6 +14,9 @@ domain_intel.py
      ที่งานวิจัยด้าน anti-phishing ใช้กันเป็นมาตรฐาน) ใช้ rdap.org เป็น bootstrap
      เดียว (มันจะหา RDAP server ที่ถูกต้องของแต่ละนามสกุลแล้ว redirect ให้เอง) จึง
      ไม่ต้องพึ่งไลบรารี whois ภายนอกที่รูปแบบผลลัพธ์ไม่มีมาตรฐานเดียวกัน
+     นอกจากวันจดทะเบียนแล้ว ยังแกะ "จดผ่านใคร" (registrar) และ "ใครถือครอง"
+     (registrant — ส่วนใหญ่ถูกปิดตามนโยบายความเป็นส่วนตัว) มาแสดงเป็นข้อมูล
+     ประกอบด้วย โดยไม่มีผลต่อคะแนนความเสี่ยง
 
   2) ใบรับรอง SSL/TLS ต่อ handshake จริงเพื่อดู:
        - ตรวจสอบ certificate ผ่านหรือไม่ (self-signed / hostname ไม่ตรง ฯลฯ)
@@ -49,10 +52,11 @@ def _signal(key: str, title: str, detail: str) -> dict:
             "points": points, "severity": severity}
 
 
-def _parse_rdap_date(events):
-    """หา event ประเภท 'registration' ใน events ของ RDAP คืน datetime (UTC) หรือ None"""
+def _parse_rdap_date(events, action="registration"):
+    """หา event ประเภทที่ระบุ (registration/expiration) ใน events ของ RDAP
+    คืน datetime (UTC) หรือ None"""
     for ev in events or []:
-        if ev.get("eventAction") != "registration":
+        if ev.get("eventAction") != action:
             continue
         raw = ev.get("eventDate")
         if not raw:
@@ -67,10 +71,90 @@ def _parse_rdap_date(events):
     return None
 
 
+# คำที่นายทะเบียนใช้แทนชื่อจริงเมื่อผู้ถือครองเลือกปิดข้อมูล (นโยบายความเป็นส่วนตัว
+# ตาม GDPR/ICANN ตั้งแต่ปี 2018 โดเมนส่วนใหญ่จะเป็นแบบนี้) — เจอคำพวกนี้ให้ถือว่า
+# "ไม่เปิดเผย" ไม่ใช่ชื่อจริง จะได้ไม่แสดงคำว่า REDACTED โต้ง ๆ ให้ผู้ใช้งง
+_REDACTED_MARKERS = ("redact", "privacy", "private", "gdpr", "data protected",
+                     "not disclosed", "withheld", "statutory masking")
+
+
+def _is_redacted(name: str) -> bool:
+    lower = name.lower()
+    return any(m in lower for m in _REDACTED_MARKERS)
+
+
+def _walk_entities(entities):
+    """ไล่ entity ทุกตัวใน RDAP รวมที่ซ้อนอยู่ข้างใน (บาง registry ซ้อน registrant
+    ไว้ใต้ entity ของ registrar อีกชั้น)"""
+    for ent in entities or []:
+        if not isinstance(ent, dict):
+            continue
+        yield ent
+        yield from _walk_entities(ent.get("entities"))
+
+
+def _vcard_text(vcard_array, *props):
+    """ดึงค่า text แรกที่ไม่ว่างของ property ที่ระบุ (เรียงตามลำดับที่อยากได้ เช่น
+    fn ก่อน org) จาก vcardArray ของ RDAP (รูปแบบ jCard: ["vcard", [[ชื่อ, พารามิเตอร์,
+    ชนิด, ค่า], ...]])"""
+    entries = vcard_array[1] if (isinstance(vcard_array, list)
+                                 and len(vcard_array) >= 2
+                                 and isinstance(vcard_array[1], list)) else []
+    for want in props:
+        for entry in entries:
+            if (isinstance(entry, list) and len(entry) >= 4 and entry[0] == want
+                    and isinstance(entry[3], str) and entry[3].strip()):
+                return entry[3].strip()
+    return ""
+
+
+def _extract_registration(data: dict) -> dict:
+    """แกะข้อมูลการจดทะเบียนจากก้อน RDAP JSON — แยกเป็นฟังก์ชันล้วน ๆ (ไม่ยิงเน็ต)
+    เพื่อให้เทสต์ป้อน JSON ตัวอย่างแล้วตรวจผลได้ตรง ๆ
+
+    หมายเหตุ registrar/registrant: เป็น "ข้อมูลประกอบ" ให้ผู้ใช้ดูเท่านั้น ไม่มีผลต่อ
+    คะแนนความเสี่ยง — ชื่อผู้ถือครอง (registrant) ส่วนใหญ่ถูกปิดตามนโยบายความเป็น
+    ส่วนตัว จึงต้องแยกให้ชัดระหว่าง "ไม่เปิดเผย" (registrant_private=True) กับ
+    "ไม่มีข้อมูลมาเลย" (ทั้งคู่ว่าง) เพื่อให้หน้าเว็บอธิบายถูก"""
+    registered = _parse_rdap_date(data.get("events"))
+    if not registered:
+        return {"checked": False}
+
+    age_days = (datetime.now(timezone.utc) - registered).days
+    if age_days < 0:
+        return {"checked": False}  # นาฬิกาเซิร์ฟเวอร์เพี้ยน ไม่เอามาใช้
+
+    expires = _parse_rdap_date(data.get("events"), "expiration")
+
+    registrar = ""
+    registrant = ""
+    registrant_seen = False
+    for ent in _walk_entities(data.get("entities")):
+        roles = ent.get("roles") or []
+        name = _vcard_text(ent.get("vcardArray"), "fn", "org")
+        if "registrar" in roles and not registrar and name:
+            registrar = name
+        if "registrant" in roles:
+            registrant_seen = True
+            if name and not _is_redacted(name) and not registrant:
+                registrant = name
+
+    return {"checked": True, "age_days": age_days,
+            "registered_on": registered.date().isoformat(),
+            "expires_on": expires.date().isoformat() if expires else "",
+            "registrar": registrar,
+            "registrant": registrant,
+            # เจอ entity ผู้ถือครองแต่ชื่อว่าง/ถูกปิด = เจ้าของเลือกไม่เปิดเผย
+            # (ปกติของโดเมนยุคปัจจุบัน ไม่ใช่สัญญาณเสี่ยง)
+            "registrant_private": registrant_seen and not registrant}
+
+
 def check_domain_age(registrable: str) -> dict:
     """
-    เช็กว่าโดเมนนี้จดทะเบียนมานานแค่ไหนผ่าน RDAP
-    คืน {"checked": True, "age_days": int, "registered_on": "YYYY-MM-DD"}
+    เช็กข้อมูลจดทะเบียนของโดเมนผ่าน RDAP: อายุ + วันหมดอายุ + จดผ่านใคร + ผู้ถือครอง
+    คืน {"checked": True, "age_days": int, "registered_on": "YYYY-MM-DD",
+         "expires_on": str, "registrar": str, "registrant": str,
+         "registrant_private": bool}
     หรือ {"checked": False} ถ้าเช็กไม่ได้ (นามสกุลไม่รองรับ RDAP / ไม่มีข้อมูล /
     เครือข่ายมีปัญหา) — ถือว่า "ไม่รู้" ไม่ใช่ "เสี่ยง"
     """
@@ -90,15 +174,7 @@ def check_domain_age(registrable: str) -> dict:
     except Exception:
         return {"checked": False}
 
-    registered = _parse_rdap_date(data.get("events"))
-    if not registered:
-        return {"checked": False}
-
-    age_days = (datetime.now(timezone.utc) - registered).days
-    if age_days < 0:
-        return {"checked": False}  # นาฬิกาเซิร์ฟเวอร์เพี้ยน ไม่เอามาใช้
-    return {"checked": True, "age_days": age_days,
-            "registered_on": registered.date().isoformat()}
+    return _extract_registration(data)
 
 
 def check_ssl_certificate(host: str, port: int = 443) -> dict:

@@ -3,7 +3,7 @@
 models.py
 โครงสร้างฐานข้อมูล (SQLite ผ่าน SQLAlchemy)
 
-User            บัญชีผู้ใช้ + สถานะแผน (free/premium) + ตัวนับโควตาการเช็คเชิงลึกรายวัน
+User            บัญชีผู้ใช้ + สถานะแผน (free/premium)
 ScanHistory     ประวัติการเช็คลิงก์ของผู้ใช้ที่ล็อกอิน (ไม่เก็บของ anonymous)
 Payment         บันทึกการชำระเงิน "จำลอง" แต่ละครั้ง (ไม่ใช่ธุรกรรมจริง)
 ApiKey          กุญแจสำหรับเรียก /api/check แบบโปรแกรม (เฉพาะพรีเมียม)
@@ -29,7 +29,9 @@ class User(UserMixin, db.Model):
     plan = db.Column(db.String(20), nullable=False, default="free")  # 'free' | 'premium'
     premium_until = db.Column(db.DateTime, nullable=True)
 
-    # โควตาการเช็คเชิงลึกของแผนฟรี รีเซ็ตทุกวัน (ดูตาม deep_checks_date)
+    # เลิกใช้แล้ว (เดิมคือตัวนับโควตาเช็คเชิงลึกรายวันของแผนฟรี — ตอนนี้การตรวจ
+    # เชิงลึกเป็นของพรีเมียมทั้งหมด) คอลัมน์คงไว้เพราะฐานข้อมูลจริงมีอยู่แล้ว
+    # และ SQLite ไม่มีระบบ migration ในโปรเจกต์นี้ — อย่าเอาไปใช้ต่อ
     deep_checks_today = db.Column(db.Integer, nullable=False, default=0)
     deep_checks_date = db.Column(db.Date, nullable=False, default=date.today)
 
@@ -49,26 +51,6 @@ class User(UserMixin, db.Model):
     @property
     def is_premium(self) -> bool:
         return self.plan == "premium" and bool(self.premium_until) and self.premium_until > datetime.utcnow()
-
-    def _reset_quota_if_new_day(self) -> None:
-        if self.deep_checks_date != date.today():
-            self.deep_checks_date = date.today()
-            self.deep_checks_today = 0
-
-    def deep_checks_remaining(self, daily_limit: int) -> int:
-        if self.is_premium:
-            return -1  # -1 แปลว่าไม่จำกัด
-        self._reset_quota_if_new_day()
-        return max(0, daily_limit - self.deep_checks_today)
-
-    def can_run_deep_check(self, daily_limit: int) -> bool:
-        return self.is_premium or self.deep_checks_remaining(daily_limit) > 0
-
-    def record_deep_check(self) -> None:
-        if self.is_premium:
-            return
-        self._reset_quota_if_new_day()
-        self.deep_checks_today += 1
 
     def activate_premium(self, duration_days: int) -> None:
         now = datetime.utcnow()

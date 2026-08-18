@@ -61,6 +61,9 @@ export function mountQrChecker(panel, resultEl) {
       // QR ที่ไม่ใช่ลิงก์: มีแต่การ์ด QR (ไม่มีลิงก์ให้ตรวจ)
       resultEl.innerHTML = "";
       if (data.scan) {
+        // สิทธิ์คงเหลือของผู้ไม่ล็อกอินติดมากับก้อนนอก (data) แต่การ์ดผลลัพธ์
+        // วาดจาก data.scan — ส่งต่อให้แถบสิทธิ์คงเหลือแสดงในโหมด QR ด้วย
+        if (data.anon_quota) data.scan.anon_quota = data.anon_quota;
         const slot = document.createElement("div");
         resultEl.appendChild(slot);
         renderResult(slot, data.scan);
