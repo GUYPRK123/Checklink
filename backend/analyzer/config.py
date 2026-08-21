@@ -37,7 +37,7 @@ BRANDS = [
     {"label": "discord",   "domains": ["discord.com", "discord.gg"]},
     {"label": "linkedin",  "domains": ["linkedin.com"]},
     # ---- เทคโนโลยี / บริการออนไลน์ ----
-    {"label": "github",    "domains": ["github.com", "github.io"]},
+    {"label": "github",    "domains": ["github.com"]},
     {"label": "adobe",     "domains": ["adobe.com"]},
     {"label": "dropbox",   "domains": ["dropbox.com"]},
     {"label": "zoom",      "domains": ["zoom.us", "zoom.com"]},
@@ -88,6 +88,38 @@ BRANDS = [
     {"label": "ais",       "domains": ["ais.th", "ais.co.th"]},
     {"label": "dtac",      "domains": ["dtac.co.th"]},
 ]
+
+# ---------------------------------------------------------------------------
+# โดเมนประเภท "ให้ใครก็ได้เอาเว็บมาฝาก" (user-generated content)
+# ---------------------------------------------------------------------------
+# โดเมนกลุ่มนี้ต่างจากโดเมนแบรนด์ตรงที่ "เจ้าของโดเมนไม่ได้คุมเนื้อหาข้างใน"
+# ใครสมัครก็ได้พื้นที่ของตัวเองภายในไม่กี่นาที เช่น ใครก็ตั้ง ชื่ออะไรก็ได้.github.io
+#
+# ที่มา: จากการทดสอบ 100 ลิงก์ (20 ส.ค. 2569) พบว่า github.io เคยถูกใส่ไว้ใน
+# domains ของแบรนด์ GitHub ทำให้หน้าฟิชชิงจริง 5 อันที่ฝากอยู่บน github.io
+# (หน้าล็อกอิน Facebook ปลอม / โคลน Amazon / โคลน Netflix / ปลอม Ledger)
+# ได้ผลเป็น "เขียว = ปลอดภัย" ซึ่งอันตรายกว่าการจับไม่ได้ เพราะระบบไปรับรอง
+# ให้ผู้ใช้กดเข้าเว็บหลอกด้วยตัวเอง
+#
+# กติกา: โดเมนในลิสต์นี้ **ห้ามให้ผลเขียวเด็ดขาด** อย่างมากได้แค่เหลือง
+# และต้องตรวจชื่อโดเมนย่อย/path ต่อว่ามีการอ้างแบรนด์อื่นหรือไม่
+#
+# หมายเหตุสำหรับคนดูแลลิสต์: ห้ามเอาโดเมนกลุ่มนี้กลับไปใส่ใน BRANDS อีก
+# แม้บริษัทเจ้าของจะน่าเชื่อถือแค่ไหนก็ตาม เพราะสิ่งที่เราเชื่อได้คือ "ตัวบริษัท"
+# ไม่ใช่ "เนื้อหาที่คนอื่นเอามาฝากบนโดเมนของบริษัท"
+USER_CONTENT_DOMAINS = {
+    # โฮสต์หน้าเว็บฟรีจากผู้ให้บริการใหญ่
+    "github.io", "gitbook.io", "gitlab.io", "pages.dev", "vercel.app",
+    "netlify.app", "netlify.com", "web.app", "firebaseapp.com",
+    "replit.app", "repl.co", "glitch.me", "surge.sh", "onrender.com",
+    "framer.app", "framer.website", "webflow.io", "wixsite.com",
+    "weebly.com", "square.site", "blogspot.com", "wordpress.com",
+    "tumblr.com", "myshopify.com", "zapier.app", "azurewebsites.net",
+    "herokuapp.com", "workers.dev", "r2.dev", "trycloudflare.com",
+    # DNS ฟรี/ไดนามิก ที่มิจฉาชีพใช้บ่อย
+    "duckdns.org", "no-ip.org", "ddns.net", "serveo.net", "ngrok.io",
+    "ngrok-free.app", "loca.lt",
+}
 
 # นามสกุลโดเมน 2 ชั้น ที่ต้องรู้จัก (กันปัญหา co.th / go.th ถูกตัดผิด)
 MULTI_SUFFIXES = {
@@ -176,6 +208,15 @@ WEIGHTS = {
     # (เช่น amazon.co.jp ของจริงที่ลิสต์เราไม่ครบ vs amazon.xyz ของปลอม)
     # ตัดสินจากชื่ออย่างเดียวไม่ได้ ให้ระดับกลางแล้วพึ่งสัญญาณอื่นร่วมตัดสิน
     "brand_bare_domain":   (3, "high"),
+<<<<<<< Updated upstream
+=======
+    # หน้าเว็บฝากอยู่บนโดเมนที่ใครก็สมัครได้ — ไม่ผิดในตัวเอง (นักเรียน/นักพัฒนาใช้กันปกติ)
+    # จึงให้คะแนนต่ำ หน้าที่หลักของสัญญาณนี้คือ "กันไม่ให้ได้เขียว" มากกว่าการทำให้แดง
+    "user_content_host":   (1, "low"),
+    # แต่ถ้าเอาชื่อแบรนด์อื่นมาตั้งเป็นชื่อโดเมนย่อย/path บนพื้นที่ฝากฟรี = เจตนาปลอมชัด
+    # (เช่น aryama10.github.io/facebook-login-page) ไม่มีเหตุผลสุจริตที่จะทำแบบนี้
+    "user_content_brand":  (6, "critical"),
+>>>>>>> Stashed changes
     "typosquatting":       (6, "critical"),
     "ip_host":             (5, "critical"),
     "userinfo_at":         (5, "critical"),

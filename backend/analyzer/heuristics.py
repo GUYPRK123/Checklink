@@ -10,7 +10,11 @@ import re
 from urllib.parse import unquote
 
 from .config import (BRANDS, RISKY_TLDS, SHORTENERS, LURE_KEYWORDS, WEIGHTS,
+<<<<<<< Updated upstream
                      EXECUTABLE_EXTENSIONS)
+=======
+                     EXECUTABLE_EXTENSIONS, USER_CONTENT_DOMAINS)
+>>>>>>> Stashed changes
 
 # ร่องรอยของโค้ดสคริปต์ในพารามิเตอร์ลิงก์ (ลิงก์ยิง XSS ใส่เว็บปลายทาง)
 # เลือกเฉพาะรูปแบบที่แทบไม่มีทางโผล่ใน URL ปกติ — "javascript" เฉย ๆ ไม่นับ
@@ -70,16 +74,55 @@ def analyze(parsed: dict) -> dict:
     haystack = (host + " " + path).lower()
 
     # 0) ตรงกับโดเมนจริงของแบรนด์เป๊ะ -> ปลอดภัย (ลัดออก)
-    for b in BRANDS:
-        if reg in b["domains"]:
-            signals.append({
-                "id": "verified_brand",
-                "title": f"ตรงกับโดเมนทางการของ {b['label'].upper()}",
-                "detail": f"โดเมน {reg} อยู่ในรายชื่อโดเมนจริงที่ตรวจสอบแล้ว",
-                "points": 0, "severity": "good",
-            })
-            return {"score": 0, "signals": signals,
-                    "verified_safe": True, "legit_brand": b["label"]}
+    #    ยกเว้นโดเมนประเภทให้คนอื่นมาฝากเว็บ (github.io ฯลฯ) ที่ต้องตรวจต่อเสมอ
+    #    เพราะสิ่งที่เชื่อได้คือ "ตัวบริษัทเจ้าของโดเมน" ไม่ใช่ "เนื้อหาที่คนอื่นเอามาฝาก"
+    is_user_content = reg in USER_CONTENT_DOMAINS
+    if not is_user_content:
+        for b in BRANDS:
+            if reg in b["domains"]:
+                signals.append({
+                    "id": "verified_brand",
+                    "title": f"ตรงกับโดเมนทางการของ {b['label'].upper()}",
+                    "detail": f"โดเมน {reg} อยู่ในรายชื่อโดเมนจริงที่ตรวจสอบแล้ว",
+                    "points": 0, "severity": "good",
+                })
+                return {"score": 0, "signals": signals,
+                        "verified_safe": True, "legit_brand": b["label"]}
+    else:
+        # เว็บที่ฝากบนพื้นที่ฟรี: ตัวมันเองไม่ผิด แต่ยืนยันความปลอดภัยให้ไม่ได้
+        signals.append(_signal(
+            "user_content_host",
+            f"หน้านี้ฝากอยู่บนพื้นที่เว็บฟรี ({reg})",
+            f"\"{reg}\" เป็นบริการที่ใครสมัครก็เอาเว็บของตัวเองมาฝากได้ "
+            f"เนื้อหาข้างในจึงเป็นของผู้ใช้คนนั้น ไม่ใช่ของบริษัทเจ้าของโดเมน "
+            f"— ระบบจึงยืนยันให้ไม่ได้ว่าปลอดภัย"))
+
+        # ถ้าเอาชื่อแบรนด์อื่นมาตั้งเป็นชื่อโดเมนย่อยหรือใส่ใน path บนพื้นที่ฝากฟรี
+        # เช่น aryama10.github.io/facebook-login-page -> ไม่มีเหตุผลสุจริตที่จะทำ
+        #
+        # ข้อยกเว้นสำคัญ: ถ้าชื่อโดเมนย่อย "เท่ากับชื่อแบรนด์เป๊ะ" (microsoft.github.io,
+        # facebook.github.io) มักเป็นบัญชีจริงของบริษัทนั้นที่ใช้แจกเอกสารโครงการ
+        # โอเพนซอร์ส เพราะชื่อบัญชีบนแพลตฟอร์มพวกนี้มีได้เจ้าเดียวและบริษัทใหญ่จองไปแล้ว
+        # กรณีนี้จึงไม่เตือนซ้ำ ปล่อยให้เป็นเหลืองจาก user_content_host พอ
+        sub = (parsed.get("subdomain", "") or "").lower()
+        sub_is_exact_brand = any(sub == n for b in BRANDS
+                                 for n in [b["label"]] + b.get("aliases", []))
+        if not sub_is_exact_brand:
+            for b in BRANDS:
+                names = [b["label"]] + b.get("aliases", [])
+                hit = next((n for n in names
+                            if re.search(r"(^|[^a-z])" + re.escape(n) + r"([^a-z]|$)",
+                                         sub + " " + path.lower())), None)
+                if hit:
+                    sig = _signal(
+                        "user_content_brand",
+                        f"ใช้ชื่อ {hit.upper()} บนพื้นที่เว็บฟรี",
+                        f"หน้านี้ฝากอยู่บน {reg} ซึ่งใครก็สมัครได้ แต่ตั้งชื่อ/เส้นทางว่า "
+                        f"\"{hit}\" เหมือนเป็นเว็บของแบรนด์นั้น — เว็บทางการของ {hit} "
+                        f"ไม่ได้อยู่บนพื้นที่ฝากฟรีแบบนี้")
+                    sig["brand"] = b["label"]
+                    signals.append(sig)
+                    break
 
     # 0.5) homoglyph: โฮสต์ใช้อักขระต่างภาษาที่หน้าตาเหมือนตัวละตินเพื่อปลอมเป็นแบรนด์
     # ตรวจพบมาจากชั้น parse (url_parser._homoglyph_brand) — โดเมนแบบนี้แทบไม่มีทาง
@@ -104,7 +147,14 @@ def analyze(parsed: dict) -> dict:
     #     ปกติ = medium และมี combo เพิ่มคะแนนถ้าหน้านั้นขอรหัสผ่านด้วย
     host_l = host.lower()
     path_l = path.lower()
+<<<<<<< Updated upstream
     for b in BRANDS:
+=======
+    # โดเมนพื้นที่ฝากฟรีตรวจเรื่องแบรนด์ไปแล้วข้างบน (user_content_brand) จึงข้ามกฎนี้
+    # ไม่งั้นจะนับซ้ำ และคำว่า "github" ใน github.io ก็จะถูกอ่านว่าเป็นการปลอมแบรนด์
+    # ทั้งที่มันคือชื่อแพลตฟอร์มตามปกติ ทำให้เว็บ github.io ทุกหน้าติดสัญญาณผิด ๆ
+    for b in ([] if is_user_content else BRANDS):
+>>>>>>> Stashed changes
         names = [b["label"]] + b.get("aliases", [])
         found = next((n for n in names
                       if re.search(r"(^|[^a-z])" + re.escape(n) + r"([^a-z]|$)", host_l)), None)

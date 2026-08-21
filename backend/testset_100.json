@@ -1,0 +1,702 @@
+[
+ {
+  "url": "https://www.google.com",
+  "label": "safe",
+  "stratum": "global_popular",
+  "source": "manual",
+  "note": "เว็บดังต่างประเทศ"
+ },
+ {
+  "url": "https://www.youtube.com",
+  "label": "safe",
+  "stratum": "global_popular",
+  "source": "manual",
+  "note": "เว็บดังต่างประเทศ"
+ },
+ {
+  "url": "https://www.facebook.com",
+  "label": "safe",
+  "stratum": "global_popular",
+  "source": "manual",
+  "note": "เว็บดังต่างประเทศ"
+ },
+ {
+  "url": "https://github.com",
+  "label": "safe",
+  "stratum": "global_popular",
+  "source": "manual",
+  "note": "เว็บดังต่างประเทศ"
+ },
+ {
+  "url": "https://www.amazon.com",
+  "label": "safe",
+  "stratum": "global_popular",
+  "source": "manual",
+  "note": "เว็บดังต่างประเทศ"
+ },
+ {
+  "url": "https://www.netflix.com",
+  "label": "safe",
+  "stratum": "global_popular",
+  "source": "manual",
+  "note": "เว็บดังต่างประเทศ"
+ },
+ {
+  "url": "https://www.linkedin.com",
+  "label": "safe",
+  "stratum": "global_popular",
+  "source": "manual",
+  "note": "เว็บดังต่างประเทศ"
+ },
+ {
+  "url": "https://www.instagram.com",
+  "label": "safe",
+  "stratum": "global_popular",
+  "source": "manual",
+  "note": "เว็บดังต่างประเทศ"
+ },
+ {
+  "url": "https://www.microsoft.com",
+  "label": "safe",
+  "stratum": "global_popular",
+  "source": "manual",
+  "note": "เว็บดังต่างประเทศ"
+ },
+ {
+  "url": "https://www.apple.com",
+  "label": "safe",
+  "stratum": "global_popular",
+  "source": "manual",
+  "note": "เว็บดังต่างประเทศ"
+ },
+ {
+  "url": "https://www.wikipedia.org",
+  "label": "safe",
+  "stratum": "global_outside",
+  "source": "manual",
+  "note": "นอกรายชื่อ - วัดการเตือนผิด"
+ },
+ {
+  "url": "https://stackoverflow.com",
+  "label": "safe",
+  "stratum": "global_outside",
+  "source": "manual",
+  "note": "นอกรายชื่อ - วัดการเตือนผิด"
+ },
+ {
+  "url": "https://www.reddit.com",
+  "label": "safe",
+  "stratum": "global_outside",
+  "source": "manual",
+  "note": "นอกรายชื่อ - วัดการเตือนผิด"
+ },
+ {
+  "url": "https://www.bbc.com",
+  "label": "safe",
+  "stratum": "global_outside",
+  "source": "manual",
+  "note": "นอกรายชื่อ - วัดการเตือนผิด"
+ },
+ {
+  "url": "https://www.cloudflare.com",
+  "label": "safe",
+  "stratum": "global_outside",
+  "source": "manual",
+  "note": "นอกรายชื่อ - วัดการเตือนผิด"
+ },
+ {
+  "url": "https://www.python.org",
+  "label": "safe",
+  "stratum": "global_outside",
+  "source": "manual",
+  "note": "นอกรายชื่อ - วัดการเตือนผิด"
+ },
+ {
+  "url": "https://developer.mozilla.org",
+  "label": "safe",
+  "stratum": "global_outside",
+  "source": "manual",
+  "note": "นอกรายชื่อ + มีโดเมนย่อย"
+ },
+ {
+  "url": "https://www.nytimes.com",
+  "label": "safe",
+  "stratum": "global_outside",
+  "source": "manual",
+  "note": "นอกรายชื่อ - วัดการเตือนผิด"
+ },
+ {
+  "url": "https://arxiv.org",
+  "label": "safe",
+  "stratum": "global_outside",
+  "source": "manual",
+  "note": "นอกรายชื่อ - วัดการเตือนผิด"
+ },
+ {
+  "url": "https://wordpress.org",
+  "label": "safe",
+  "stratum": "global_outside",
+  "source": "manual",
+  "note": "นอกรายชื่อ - วัดการเตือนผิด"
+ },
+ {
+  "url": "https://news.ycombinator.com",
+  "label": "safe",
+  "stratum": "global_outside",
+  "source": "manual",
+  "note": "นอกรายชื่อ + มีโดเมนย่อย"
+ },
+ {
+  "url": "https://www.who.int",
+  "label": "safe",
+  "stratum": "global_outside",
+  "source": "manual",
+  "note": "นอกรายชื่อ + นามสกุลไม่ค่อยพบ"
+ },
+ {
+  "url": "https://www.un.org",
+  "label": "safe",
+  "stratum": "global_outside",
+  "source": "manual",
+  "note": "นอกรายชื่อ - วัดการเตือนผิด"
+ },
+ {
+  "url": "https://www.nature.com",
+  "label": "safe",
+  "stratum": "global_outside",
+  "source": "manual",
+  "note": "นอกรายชื่อ - วัดการเตือนผิด"
+ },
+ {
+  "url": "https://www.ieee.org",
+  "label": "safe",
+  "stratum": "global_outside",
+  "source": "manual",
+  "note": "นอกรายชื่อ - วัดการเตือนผิด"
+ },
+ {
+  "url": "https://www.scb.co.th",
+  "label": "safe",
+  "stratum": "thai_bank",
+  "source": "manual",
+  "note": "ธนาคารไทย"
+ },
+ {
+  "url": "https://www.kasikornbank.com",
+  "label": "safe",
+  "stratum": "thai_bank",
+  "source": "manual",
+  "note": "ธนาคารไทย"
+ },
+ {
+  "url": "https://krungthai.com",
+  "label": "safe",
+  "stratum": "thai_bank",
+  "source": "manual",
+  "note": "ธนาคารไทย"
+ },
+ {
+  "url": "https://www.bangkokbank.com",
+  "label": "safe",
+  "stratum": "thai_bank",
+  "source": "manual",
+  "note": "ธนาคารไทย"
+ },
+ {
+  "url": "https://www.gsb.or.th",
+  "label": "safe",
+  "stratum": "thai_bank",
+  "source": "manual",
+  "note": "ธนาคารไทย"
+ },
+ {
+  "url": "https://www.baac.or.th",
+  "label": "safe",
+  "stratum": "thai_bank",
+  "source": "manual",
+  "note": "ธนาคารไทย"
+ },
+ {
+  "url": "https://www.ttbbank.com",
+  "label": "safe",
+  "stratum": "thai_bank",
+  "source": "manual",
+  "note": "ธนาคารไทย"
+ },
+ {
+  "url": "https://www.uob.co.th",
+  "label": "safe",
+  "stratum": "thai_bank",
+  "source": "manual",
+  "note": "ธนาคารไทย"
+ },
+ {
+  "url": "https://www.bot.or.th",
+  "label": "safe",
+  "stratum": "thai_gov",
+  "source": "manual",
+  "note": "ธนาคารแห่งประเทศไทย - นอกรายชื่อ (สำคัญ)"
+ },
+ {
+  "url": "https://www.set.or.th",
+  "label": "safe",
+  "stratum": "thai_gov",
+  "source": "manual",
+  "note": "ตลาดหลักทรัพย์ - นอกรายชื่อ"
+ },
+ {
+  "url": "https://www.ncsa.or.th",
+  "label": "safe",
+  "stratum": "thai_gov",
+  "source": "manual",
+  "note": "สกมช. เอง - นอกรายชื่อ"
+ },
+ {
+  "url": "https://www.rd.go.th",
+  "label": "safe",
+  "stratum": "thai_gov",
+  "source": "manual",
+  "note": "กรมสรรพากร"
+ },
+ {
+  "url": "https://www.moph.go.th",
+  "label": "safe",
+  "stratum": "thai_gov",
+  "source": "manual",
+  "note": "กระทรวงสาธารณสุข"
+ },
+ {
+  "url": "https://www.dopa.go.th",
+  "label": "safe",
+  "stratum": "thai_gov",
+  "source": "manual",
+  "note": "กรมการปกครอง"
+ },
+ {
+  "url": "https://www.mof.go.th",
+  "label": "safe",
+  "stratum": "thai_gov",
+  "source": "manual",
+  "note": "กระทรวงการคลัง"
+ },
+ {
+  "url": "https://www.mhesi.go.th",
+  "label": "safe",
+  "stratum": "thai_gov",
+  "source": "manual",
+  "note": "กระทรวง อว."
+ },
+ {
+  "url": "https://www.dsi.go.th",
+  "label": "safe",
+  "stratum": "thai_gov",
+  "source": "manual",
+  "note": "กรมสอบสวนคดีพิเศษ"
+ },
+ {
+  "url": "https://www.royalthaipolice.go.th",
+  "label": "safe",
+  "stratum": "thai_gov",
+  "source": "manual",
+  "note": "สำนักงานตำรวจแห่งชาติ"
+ },
+ {
+  "url": "https://www.chula.ac.th",
+  "label": "safe",
+  "stratum": "thai_edu",
+  "source": "manual",
+  "note": "จุฬาลงกรณ์มหาวิทยาลัย"
+ },
+ {
+  "url": "https://www.mahidol.ac.th",
+  "label": "safe",
+  "stratum": "thai_edu",
+  "source": "manual",
+  "note": "มหาวิทยาลัยมหิดล"
+ },
+ {
+  "url": "https://www.ku.ac.th",
+  "label": "safe",
+  "stratum": "thai_edu",
+  "source": "manual",
+  "note": "มหาวิทยาลัยเกษตรศาสตร์"
+ },
+ {
+  "url": "https://www.sut.ac.th",
+  "label": "safe",
+  "stratum": "thai_edu",
+  "source": "manual",
+  "note": "มหาวิทยาลัยเทคโนโลยีสุรนารี"
+ },
+ {
+  "url": "https://www.tu.ac.th",
+  "label": "safe",
+  "stratum": "thai_edu",
+  "source": "manual",
+  "note": "มหาวิทยาลัยธรรมศาสตร์"
+ },
+ {
+  "url": "https://www.kmutt.ac.th",
+  "label": "safe",
+  "stratum": "thai_edu",
+  "source": "manual",
+  "note": "มจธ."
+ },
+ {
+  "url": "https://www.cmu.ac.th",
+  "label": "safe",
+  "stratum": "thai_edu",
+  "source": "manual",
+  "note": "มหาวิทยาลัยเชียงใหม่"
+ },
+ {
+  "url": "https://www.robiox.com.py/users/113481176786/profile/",
+  "label": "dangerous",
+  "stratum": "phish_fresh",
+  "source": "openphish 20 ส.ค. 2569",
+  "note": "สะกดเพี้ยน roblox->robiox"
+ },
+ {
+  "url": "https://www.roblox.com.ml/users/274335820842/profile",
+  "label": "dangerous",
+  "stratum": "phish_fresh",
+  "source": "openphish 20 ส.ค. 2569",
+  "note": "ใช้ชื่อแบรนด์เป็นโดเมนย่อย"
+ },
+ {
+  "url": "http://wvw-facebook.com/share-us5ow7ds2?mibextid=wwXIfr",
+  "label": "dangerous",
+  "stratum": "phish_fresh",
+  "source": "openphish 20 ส.ค. 2569",
+  "note": "สะกดเพี้ยน www->wvw"
+ },
+ {
+  "url": "https://www.whtsapp-serve.chat/",
+  "label": "dangerous",
+  "stratum": "phish_fresh",
+  "source": "openphish 20 ส.ค. 2569",
+  "note": "สะกดเพี้ยน whatsapp->whtsapp"
+ },
+ {
+  "url": "http://wwwmicrosoft-com-en-us-microsoft-365-outlook-email.framer.website/",
+  "label": "dangerous",
+  "stratum": "phish_fresh",
+  "source": "openphish 20 ส.ค. 2569",
+  "note": "ยัดชื่อแบรนด์ทั้งชุดเป็นโดเมนย่อย"
+ },
+ {
+  "url": "http://helpcenteraple.tempurl.host/D%207%20L%20S%20E%20N%20D%20P%20K/track/track.php",
+  "label": "dangerous",
+  "stratum": "phish_fresh",
+  "source": "openphish 20 ส.ค. 2569",
+  "note": "สะกดเพี้ยน apple->aple + %20 ใน path"
+ },
+ {
+  "url": "http://apple.5g.in/ch",
+  "label": "dangerous",
+  "stratum": "phish_fresh",
+  "source": "openphish 20 ส.ค. 2569",
+  "note": "ชื่อแบรนด์เป็นโดเมนย่อยของโดเมนอื่น"
+ },
+ {
+  "url": "http://www.m.amz-topi.icu/",
+  "label": "dangerous",
+  "stratum": "phish_fresh",
+  "source": "openphish 20 ส.ค. 2569",
+  "note": "ย่อชื่อแบรนด์ amazon->amz"
+ },
+ {
+  "url": "https://www.bankofamericaijcf.com/",
+  "label": "dangerous",
+  "stratum": "phish_fresh",
+  "source": "openphish 20 ส.ค. 2569",
+  "note": "ชื่อธนาคาร + ตัวอักษรมั่ว"
+ },
+ {
+  "url": "https://web-wa-llet-support.zapier.app/",
+  "label": "dangerous",
+  "stratum": "phish_fresh",
+  "source": "openphish 20 ส.ค. 2569",
+  "note": "แยกคำ wallet ด้วยขีด"
+ },
+ {
+  "url": "https://kucoinwlogn.gitbook.io/sign-in",
+  "label": "dangerous",
+  "stratum": "phish_fresh",
+  "source": "openphish 20 ส.ค. 2569",
+  "note": "เลียนแบบ kucoin บนโฮสต์ฟรี"
+ },
+ {
+  "url": "https://bybitamlchecker.com/connect",
+  "label": "dangerous",
+  "stratum": "phish_fresh",
+  "source": "openphish 20 ส.ค. 2569",
+  "note": "อ้างชื่อ bybit"
+ },
+ {
+  "url": "https://imtokens.co/",
+  "label": "dangerous",
+  "stratum": "phish_fresh",
+  "source": "openphish 20 ส.ค. 2569",
+  "note": "เลียนแบบ imToken"
+ },
+ {
+  "url": "http://panoasg.github.io/ledger",
+  "label": "dangerous",
+  "stratum": "phish_fresh",
+  "source": "openphish 20 ส.ค. 2569",
+  "note": "อ้าง ledger บน github.io"
+ },
+ {
+  "url": "https://secure.zoinbase.live/",
+  "label": "dangerous",
+  "stratum": "phish_fresh",
+  "source": "openphish 20 ส.ค. 2569",
+  "note": "สะกดเพี้ยน coinbase->zoinbase"
+ },
+ {
+  "url": "http://www.robinhood-reward.com/",
+  "label": "dangerous",
+  "stratum": "phish_fresh",
+  "source": "openphish 20 ส.ค. 2569",
+  "note": "ชื่อแบรนด์ + คำล่อ reward"
+ },
+ {
+  "url": "https://moonpay-commerce-goylyguzs-heliofi.vercel.app/",
+  "label": "dangerous",
+  "stratum": "phish_fresh",
+  "source": "openphish 20 ส.ค. 2569",
+  "note": "ชื่อแบรนด์บน vercel"
+ },
+ {
+  "url": "https://aryama10.github.io/facebook-login-page/",
+  "label": "dangerous",
+  "stratum": "phish_fresh",
+  "source": "openphish 20 ส.ค. 2569",
+  "note": "หน้าล็อกอินโคลนบน github.io"
+ },
+ {
+  "url": "https://leafleafy28-design.github.io/AMAZON-CLONE/",
+  "label": "dangerous",
+  "stratum": "phish_fresh",
+  "source": "openphish 20 ส.ค. 2569",
+  "note": "โคลน amazon"
+ },
+ {
+  "url": "https://manikgupta-2004.github.io/netflix-homepage/",
+  "label": "dangerous",
+  "stratum": "phish_fresh",
+  "source": "openphish 20 ส.ค. 2569",
+  "note": "โคลน netflix"
+ },
+ {
+  "url": "https://kartikbuilds.github.io/Ledger-Co/",
+  "label": "dangerous",
+  "stratum": "phish_fresh",
+  "source": "openphish 20 ส.ค. 2569",
+  "note": "โคลน ledger"
+ },
+ {
+  "url": "https://c03n.top/",
+  "label": "dangerous",
+  "stratum": "phish_fresh",
+  "source": "openphish 20 ส.ค. 2569",
+  "note": "โดเมนสั้นมั่ว + นามสกุลเสี่ยง"
+ },
+ {
+  "url": "https://82493.xyz/",
+  "label": "dangerous",
+  "stratum": "phish_fresh",
+  "source": "openphish 20 ส.ค. 2569",
+  "note": "โดเมนตัวเลขล้วน"
+ },
+ {
+  "url": "https://www.r19a.xyz/",
+  "label": "dangerous",
+  "stratum": "phish_fresh",
+  "source": "openphish 20 ส.ค. 2569",
+  "note": "โดเมนมั่ว"
+ },
+ {
+  "url": "http://j110x.vip/",
+  "label": "dangerous",
+  "stratum": "phish_fresh",
+  "source": "openphish 20 ส.ค. 2569",
+  "note": "โดเมนมั่ว + .vip"
+ },
+ {
+  "url": "http://2641.win/",
+  "label": "dangerous",
+  "stratum": "phish_fresh",
+  "source": "openphish 20 ส.ค. 2569",
+  "note": "โดเมนตัวเลข + .win"
+ },
+ {
+  "url": "https://sp0ct0-belqor-biz-tralka-zifvem.pages.dev/",
+  "label": "dangerous",
+  "stratum": "phish_fresh",
+  "source": "openphish 20 ส.ค. 2569",
+  "note": "โดเมนย่อยสุ่มบน pages.dev"
+ },
+ {
+  "url": "http://nurtured-umbrella-322056.framer.app/",
+  "label": "dangerous",
+  "stratum": "phish_fresh",
+  "source": "openphish 20 ส.ค. 2569",
+  "note": "โดเมนย่อยสุ่มบน framer.app"
+ },
+ {
+  "url": "https://educator-10805187654567899087656.square.site/",
+  "label": "dangerous",
+  "stratum": "phish_fresh",
+  "source": "openphish 20 ส.ค. 2569",
+  "note": "โฮสต์ร้านค้าฟรี"
+ },
+ {
+  "url": "http://yamzoza-north-007-amazon.s3.us-east-1.amazonaws.com/moon.html",
+  "label": "dangerous",
+  "stratum": "phish_fresh",
+  "source": "openphish 20 ส.ค. 2569",
+  "note": "ฝากไฟล์บน S3 + ชื่อแบรนด์ใน bucket"
+ },
+ {
+  "url": "https://insta-clone--leumasleinad419.replit.app/",
+  "label": "dangerous",
+  "stratum": "phish_fresh",
+  "source": "openphish 20 ส.ค. 2569",
+  "note": "โคลน instagram บน replit"
+ },
+ {
+  "url": "https://urlz.li/ea1ff161",
+  "label": "dangerous",
+  "stratum": "phish_fresh",
+  "source": "openphish 20 ส.ค. 2569",
+  "note": "ลิงก์ย่อ ซ่อนปลายทาง"
+ },
+ {
+  "url": "https://u.to/hkKeIg",
+  "label": "dangerous",
+  "stratum": "phish_fresh",
+  "source": "openphish 20 ส.ค. 2569",
+  "note": "ลิงก์ย่อ"
+ },
+ {
+  "url": "https://s4w.in/OJNvf",
+  "label": "dangerous",
+  "stratum": "phish_fresh",
+  "source": "openphish 20 ส.ค. 2569",
+  "note": "ลิงก์ย่อ"
+ },
+ {
+  "url": "https://urlvanish.com/3f1c1509",
+  "label": "dangerous",
+  "stratum": "phish_fresh",
+  "source": "openphish 20 ส.ค. 2569",
+  "note": "ลิงก์ย่อ"
+ },
+ {
+  "url": "https://oki.jtu.mybluehost.me/wp-includes/build/m/chase/us/index.asp.php",
+  "label": "dangerous",
+  "stratum": "phish_fresh",
+  "source": "openphish 20 ส.ค. 2569",
+  "note": "เว็บ WordPress ถูกแฮ็ก + ชื่อธนาคารใน path"
+ },
+ {
+  "url": "https://vxsct1811.avnam.net/ser/wordpress/wp-admin/includes/secr/Idsp3984762836/app/index.php?view=main&id=cb2350479df4e65796513db36c87ea27",
+  "label": "dangerous",
+  "stratum": "phish_fresh",
+  "source": "openphish 20 ส.ค. 2569",
+  "note": "WordPress ถูกแฮ็ก + path ยาวมาก"
+ },
+ {
+  "url": "https://www.artmix24.de/Pemmalsioassnbesm/index.php",
+  "label": "dangerous",
+  "stratum": "phish_fresh",
+  "source": "openphish 20 ส.ค. 2569",
+  "note": "เว็บเยอรมันถูกแฮ็ก"
+ },
+ {
+  "url": "https://caura.ryz.tepuyserver.net/~tanacom/payu/WAB5/Select/index.php",
+  "label": "dangerous",
+  "stratum": "phish_fresh",
+  "source": "openphish 20 ส.ค. 2569",
+  "note": "เว็บถูกแฮ็ก + หน้าชำระเงินปลอม"
+ },
+ {
+  "url": "https://www.sporternaehrung-lambertz.de/newsletter.php",
+  "label": "dangerous",
+  "stratum": "phish_fresh",
+  "source": "openphish 20 ส.ค. 2569",
+  "note": "เว็บถูกแฮ็ก"
+ },
+ {
+  "url": "http://ajify.com/wp-hosted/hosted.html#cnjhbmrvbubyyw5kb20uy29t",
+  "label": "dangerous",
+  "stratum": "phish_fresh",
+  "source": "openphish 20 ส.ค. 2569",
+  "note": "ฝังอีเมลเหยื่อเป็น base64 ใน fragment"
+ },
+ {
+  "url": "https://dc.crsorgi.gov.in.verfiys.xyz/",
+  "label": "dangerous",
+  "stratum": "phish_fresh",
+  "source": "openphish 20 ส.ค. 2569",
+  "note": "ปลอมเว็บราชการอินเดีย (gov.in เป็นโดเมนย่อย)"
+ },
+ {
+  "url": "http://allegrolokalnie.oferta735278.click/oferta/xbox-series-x-oryginalnym-opakowaniu-z-kontrolerem-i-gr%C4%85/506406612",
+  "label": "dangerous",
+  "stratum": "phish_fresh",
+  "source": "openphish 20 ส.ค. 2569",
+  "note": "ปลอมตลาดออนไลน์โปแลนด์"
+ },
+ {
+  "url": "https://kundenservice.konto-versicherung.com/",
+  "label": "dangerous",
+  "stratum": "phish_fresh",
+  "source": "openphish 20 ส.ค. 2569",
+  "note": "ปลอมประกัน/ธนาคารเยอรมัน"
+ },
+ {
+  "url": "http://bnp-agb.de/",
+  "label": "dangerous",
+  "stratum": "phish_fresh",
+  "source": "openphish 20 ส.ค. 2569",
+  "note": "ปลอมธนาคาร BNP"
+ },
+ {
+  "url": "http://bafybeigvhkndbrfme6cbhe4vnxrshzowhlb35tgmud4ntc7murhr5rnwne.ipfs.dweb.link/",
+  "label": "dangerous",
+  "stratum": "phish_fresh",
+  "source": "openphish 20 ส.ค. 2569",
+  "note": "โฮสต์บน IPFS (ปิดยากมาก)"
+ },
+ {
+  "url": "https://pp99990009999.duckdns.org/login",
+  "label": "dangerous",
+  "stratum": "phish_fresh",
+  "source": "openphish 20 ส.ค. 2569",
+  "note": "DDNS ฟรี + หน้า login"
+ },
+ {
+  "url": "https://highmarket.my/personal/market/",
+  "label": "dangerous",
+  "stratum": "phish_fresh",
+  "source": "openphish 20 ส.ค. 2569",
+  "note": "ร้านค้าปลอม"
+ },
+ {
+  "url": "http://chatgpt0005.eu.org/careers",
+  "label": "dangerous",
+  "stratum": "phish_fresh",
+  "source": "openphish 20 ส.ค. 2569",
+  "note": "ปลอมเป็น ChatGPT"
+ },
+ {
+  "url": "https://s.teams-rf.com/p/fjbd-cbch/zoogzziw/",
+  "label": "dangerous",
+  "stratum": "phish_fresh",
+  "source": "openphish 20 ส.ค. 2569",
+  "note": "ปลอม Microsoft Teams"
+ }
+]

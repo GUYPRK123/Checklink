@@ -208,3 +208,61 @@ class Testคำล่อแบบมีขอบเขตคำ:
     def test_คำล่อคั่นด้วยขีดหรือทับยังโดน(self):
         assert "lure_keyword" in signal_ids("https://unknown-site.org/verify-account/")
         assert "lure_keyword" in signal_ids("https://example.org/login")
+<<<<<<< Updated upstream
+=======
+
+
+class Testโดเมนพื้นที่ฝากเว็บฟรี:
+    """
+    ที่มา: การทดสอบ 100 ลิงก์ (20 ส.ค. 2569) พบหน้าฟิชชิงจริง 5 อันบน github.io
+    ได้ผลเป็น "เขียว = ปลอดภัย" เพราะ github.io เคยอยู่ในลิสต์โดเมนของแบรนด์ GitHub
+    ซึ่งอันตรายกว่าการจับไม่ได้ เพราะระบบไปรับรองให้ผู้ใช้กดเข้าเว็บหลอกเอง
+
+    หลักการ: เชื่อ "บริษัทเจ้าของโดเมน" ได้ แต่เชื่อ "เนื้อหาที่คนอื่นเอามาฝาก" ไม่ได้
+    """
+
+    def test_ห้ามให้เขียวเด็ดขาด(self):
+        from analyzer.heuristics import analyze
+        for url in ("https://somestudent.github.io/portfolio/",
+                    "https://anything.pages.dev/",
+                    "https://x.vercel.app/",
+                    "https://y.duckdns.org/"):
+            assert analyze(parse_url(url))["verified_safe"] is False, url
+
+    def test_ติดสัญญาณว่าเป็นพื้นที่ฝากฟรี(self):
+        assert "user_content_host" in signal_ids("https://someone.github.io/blog/")
+
+    def test_โดเมนหลักของแบรนด์ต้องยังเขียวเหมือนเดิม(self):
+        from analyzer.heuristics import analyze
+        res = analyze(parse_url("https://github.com/torvalds/linux"))
+        assert res["verified_safe"] is True
+        assert res["legit_brand"] == "github"
+
+    def test_อ้างแบรนด์อื่นบนพื้นที่ฝากฟรีต้องเตือนหนัก(self):
+        for url in ("https://aryama10.github.io/facebook-login-page/",
+                    "https://leafleafy28-design.github.io/AMAZON-CLONE/",
+                    "https://manikgupta-2004.github.io/netflix-homepage/"):
+            assert "user_content_brand" in signal_ids(url), url
+
+    def test_บัญชีจริงของบริษัทบนแพลตฟอร์มต้องไม่ถูกกล่าวหา(self):
+        """microsoft.github.io / facebook.github.io เป็นบัญชีจริงของบริษัทนั้น
+        ใช้แจกเอกสารโครงการโอเพนซอร์ส ชื่อบัญชีมีได้เจ้าเดียวและบริษัทจองไปแล้ว"""
+        for url in ("https://microsoft.github.io/monaco-editor/",
+                    "https://facebook.github.io/react-native/"):
+            ids = signal_ids(url)
+            assert "user_content_brand" not in ids, url
+            assert "brand_impersonation" not in ids, url
+
+    def test_ชื่อแพลตฟอร์มเองต้องไม่ถูกอ่านว่าปลอมแบรนด์(self):
+        """คำว่า github ใน github.io คือชื่อแพลตฟอร์มตามปกติ ไม่ใช่การเลียนแบบ"""
+        ids = signal_ids("https://somestudent.github.io/my-portfolio/")
+        assert "brand_bare_domain" not in ids
+        assert "brand_impersonation" not in ids
+
+    def test_เว็บฝากฟรีสุจริตต้องไม่ถึงขั้นแดง(self):
+        from analyzer.config import RED_SCORE
+        for url in ("https://pallets.github.io/flask/",
+                    "https://somestudent.github.io/my-portfolio/",
+                    "https://microsoft.github.io/monaco-editor/"):
+            assert analyze(parse_url(url))["score"] < RED_SCORE, url
+>>>>>>> Stashed changes
