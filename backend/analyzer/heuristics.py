@@ -10,11 +10,7 @@ import re
 from urllib.parse import unquote
 
 from .config import (BRANDS, RISKY_TLDS, SHORTENERS, LURE_KEYWORDS, WEIGHTS,
-<<<<<<< Updated upstream
-                     EXECUTABLE_EXTENSIONS)
-=======
                      EXECUTABLE_EXTENSIONS, USER_CONTENT_DOMAINS)
->>>>>>> Stashed changes
 
 # ร่องรอยของโค้ดสคริปต์ในพารามิเตอร์ลิงก์ (ลิงก์ยิง XSS ใส่เว็บปลายทาง)
 # เลือกเฉพาะรูปแบบที่แทบไม่มีทางโผล่ใน URL ปกติ — "javascript" เฉย ๆ ไม่นับ
@@ -147,14 +143,10 @@ def analyze(parsed: dict) -> dict:
     #     ปกติ = medium และมี combo เพิ่มคะแนนถ้าหน้านั้นขอรหัสผ่านด้วย
     host_l = host.lower()
     path_l = path.lower()
-<<<<<<< Updated upstream
-    for b in BRANDS:
-=======
     # โดเมนพื้นที่ฝากฟรีตรวจเรื่องแบรนด์ไปแล้วข้างบน (user_content_brand) จึงข้ามกฎนี้
     # ไม่งั้นจะนับซ้ำ และคำว่า "github" ใน github.io ก็จะถูกอ่านว่าเป็นการปลอมแบรนด์
     # ทั้งที่มันคือชื่อแพลตฟอร์มตามปกติ ทำให้เว็บ github.io ทุกหน้าติดสัญญาณผิด ๆ
     for b in ([] if is_user_content else BRANDS):
->>>>>>> Stashed changes
         names = [b["label"]] + b.get("aliases", [])
         found = next((n for n in names
                       if re.search(r"(^|[^a-z])" + re.escape(n) + r"([^a-z]|$)", host_l)), None)
