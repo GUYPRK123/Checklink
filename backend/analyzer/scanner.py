@@ -18,7 +18,12 @@ scanner.py
   6) decide() รวมผลทั้งหมดเป็นคำตัดสินสุดท้าย
 
 กติกาตัดสิน (Analyst กำหนด):
-  - เขียว (ปลอดภัย): ยืนยันว่าเป็นเว็บจริงเท่านั้น (ตรงลิสต์แบรนด์ หรือ API บอกปลอดภัย)
+  - เขียว (ปลอดภัย): ยืนยันว่าเป็นเว็บจริงเท่านั้น — ตรงลิสต์แบรนด์ / API บอกปลอดภัย /
+    หรือ "ไม่มีสัญญาณเสี่ยงเลยแม้แต่ตัวเดียว + มีหลักฐานฝั่งปลอดภัยพอ" (ดู
+    _trust_grants_green และหัวข้อ trust evidence ใน config.py) ทางที่สามนี้เพิ่มมาเพื่อ
+    ให้เว็บสุจริตที่ไม่ได้อยู่ในลิสต์แบรนด์ — มหาวิทยาลัย หน่วยงานราชการ เว็บดังระดับโลก
+    — ไม่ต้องติดเหลืองตลอดกาล แต่ยังคงหลักการเดิมไว้ครบ: หลักฐานฝั่งปลอดภัยไม่มีคะแนน
+    จึงไม่มีทางลดระดับความเสี่ยงของลิงก์ที่มีสัญญาณอันตรายได้เลย
   - แดง (อันตราย): API บอกอันตราย / มีสัญญาณร้ายแรง / คะแนนรวมสูง
   - เหลือง (เสี่ยง): ที่เหลือทั้งหมด รวมถึง "ไม่พบสัญญาณ แต่ระบบไม่รู้จักเว็บนี้"
   จงใจไม่ปล่อยเขียวให้เว็บที่ไม่รู้จัก เพื่อกันการให้ความมั่นใจผิด ๆ
@@ -38,12 +43,34 @@ from .domain_intel import analyze_domain_intel
 from .content_checker import analyze_content
 from .config import (RED_SCORE, YELLOW_SCORE, BRANDS, TLD_INFO, RISKY_TLDS, WEIGHTS,
                      EXECUTABLE_EXTENSIONS, ARCHIVE_EXTENSIONS,
-                     APK_CONTENT_TYPE, EXECUTABLE_CONTENT_TYPES)
+                     APK_CONTENT_TYPE, EXECUTABLE_CONTENT_TYPES, GREEN_TRUST)
 
 
 def _verdict(color, label, headline, message, source):
     return {"color": color, "label": label, "headline": headline,
             "message": message, "source": source}
+
+
+def trust_total(analysis: dict) -> int:
+    """น้ำหนักรวมของ "หลักฐานฝั่งปลอดภัย" ที่เก็บได้ (ดู heuristics.collect_trust)"""
+    return sum(t.get("trust", 0) for t in analysis.get("trust", []))
+
+
+def _trust_grants_green(analysis: dict) -> bool:
+    """ยกจาก "เหลืองเพราะไม่รู้จัก" เป็นเขียวได้ไหม — ต้องครบทั้งสองข้อ
+
+    1) **ไม่มีสัญญาณเสี่ยงเหลืออยู่เลยแม้แต่ตัวเดียว** นับรวมทุกชั้นที่รันไปแล้ว
+       (ชั้น 3 ปลายทางจริง และชั้น 4 อายุโดเมน/SSL/เนื้อหา ถูกรวมเข้า analysis
+       ก่อนถึง decide() แล้ว) เช็กที่ severity ไม่ใช่ที่ score เพราะมีสัญญาณที่ตั้งใจ
+       ให้ 0 คะแนนแต่ต้องกันเขียวอยู่ เช่น shortener
+    2) หลักฐานฝั่งปลอดภัยรวมกันถึงเกณฑ์ GREEN_TRUST
+
+    ข้อ 1 คือหัวใจ: หลักฐานฝั่งปลอดภัยไม่ได้ "ลบล้าง" สัญญาณเสี่ยง มันแค่ตอบคำถาม
+    ที่เหลืออยู่ว่า "ลิงก์นี้สะอาด แต่เรารู้จักเว็บนี้จริงหรือเปล่า" เท่านั้น
+    """
+    if any(s.get("severity") != "good" for s in analysis.get("signals", [])):
+        return False
+    return trust_total(analysis) >= GREEN_TRUST
 
 
 def decide(api_result: dict, analysis: dict) -> dict:
@@ -70,6 +97,16 @@ def decide(api_result: dict, analysis: dict) -> dict:
     if analysis["score"] >= YELLOW_SCORE:
         return _verdict("yellow", "เสี่ยง", "พบสัญญาณที่ควรระวังบางอย่าง",
                         "ยังไม่ฟันธงว่าหลอก แต่มีจุดน่าสงสัย ควรตรวจสอบให้แน่ใจก่อนกรอกข้อมูล",
+                        "realtime")
+
+    # ---- ชั้นที่ 2 (ต่อ): ไม่มีสัญญาณเสี่ยงเลย + มีหลักฐานยืนยันว่าเว็บนี้เป็นของจริง ----
+    # ต้องอยู่ "หลัง" การตรวจแดง/เหลืองทั้งหมด เพื่อให้แน่ใจว่าหลักฐานฝั่งปลอดภัยไม่มี
+    # ทางแซงหน้าสัญญาณเสี่ยงได้เลย ถ้ามาถึงบรรทัดนี้แปลว่าลิงก์สะอาดจริง ๆ อยู่แล้ว
+    if _trust_grants_green(analysis):
+        why = " และ".join(t["title"] for t in analysis.get("trust", []))
+        return _verdict("green", "ปลอดภัย", "ยืนยันได้ว่าเป็นเว็บของจริง",
+                        f"ไม่พบสัญญาณผิดปกติในลิงก์นี้เลย และ{why} "
+                        "จึงยืนยันได้ว่าเป็นเว็บจริง ไม่ใช่โดเมนที่ตั้งขึ้นมาหลอก",
                         "realtime")
 
     return _verdict("yellow", "เสี่ยง", "ระบบยังไม่รู้จักเว็บนี้",
@@ -383,7 +420,9 @@ def _scan_uncached(url: str, run_deep: bool = True) -> dict:
         "destination": build_destination_view(destination),  # เส้นทาง redirect (ชั้น 3)
         "layer4": layer4,                          # อายุโดเมน/SSL/เนื้อหาเว็บ (ชั้น 4 เสริม)
         "reference": build_reference(analysis),   # โดเมนทางการของแบรนด์ (ถ้าเกี่ยวข้อง)
-        "reasons": analysis["signals"],           # รายการสัญญาณ + คำอธิบาย
+        # สัญญาณเสี่ยงก่อน แล้วต่อด้วยหลักฐานฝั่งปลอดภัย (severity "good", 0 คะแนน)
+        # เพื่อให้หน้าเว็บอธิบายได้ทั้งสองด้านว่า "ทำไมถึงเขียว" ไม่ใช่แค่ "ทำไมถึงแดง"
+        "reasons": analysis["signals"] + analysis.get("trust", []),
         "score": analysis["score"],               # คะแนนรวม (ไว้ในรายละเอียดทางเทคนิค)
         "elapsed_ms": elapsed_ms,                  # เวลาที่ใช้ตรวจ (ไว้ทำส่วนวัดความเร็ว)
         "api_checked": api_result.get("found", False),
