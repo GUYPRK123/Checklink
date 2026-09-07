@@ -208,8 +208,6 @@ class Testคำล่อแบบมีขอบเขตคำ:
     def test_คำล่อคั่นด้วยขีดหรือทับยังโดน(self):
         assert "lure_keyword" in signal_ids("https://unknown-site.org/verify-account/")
         assert "lure_keyword" in signal_ids("https://example.org/login")
-<<<<<<< Updated upstream
-=======
 
 
 class Testโดเมนพื้นที่ฝากเว็บฟรี:
@@ -265,4 +263,3 @@ class Testโดเมนพื้นที่ฝากเว็บฟรี:
                     "https://somestudent.github.io/my-portfolio/",
                     "https://microsoft.github.io/monaco-editor/"):
             assert analyze(parse_url(url))["score"] < RED_SCORE, url
->>>>>>> Stashed changes

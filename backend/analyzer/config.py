@@ -15,31 +15,46 @@ config.py
 #             แต่คนไทยจำธนาคารด้วยคำว่า kasikorn — ต้องจับได้เหมือนกัน
 # ---------------------------------------------------------------------------
 BRANDS = [
-    {"label": "google",    "domains": ["google.com", "google.co.th", "youtube.com", "gmail.com"],
+    {"label": "google",    "domains": ["google.com", "google.co.th", "youtube.com", "gmail.com", "google-analytics.com", "youtube-nocookie.com", "dns.google", "blog.google", "labs.google", "grow.google", "safety.google", "share.google", "adtrafficquality.google"],
      "aliases": ["youtube", "gmail"]},
     {"label": "facebook",  "domains": ["facebook.com", "fb.com", "messenger.com"]},
     {"label": "instagram", "domains": ["instagram.com"]},
-    {"label": "line",      "domains": ["line.me", "linecorp.com"]},
+    {"label": "line",      "domains": ["line.me", "linecorp.com", "line-apps.com"]},
     {"label": "microsoft", "domains": ["microsoft.com", "live.com", "outlook.com", "office.com",
-                                        "microsoftonline.com"],
-     "aliases": ["outlook", "hotmail", "office365"]},
-    {"label": "apple",     "domains": ["apple.com", "icloud.com"], "aliases": ["icloud"]},
-    {"label": "amazon",    "domains": ["amazon.com", "amazon.co.jp"]},
+                                        "microsoftonline.com", "cloud.microsoft", "static.microsoft", "usercontent.microsoft", "microsoft365.com", "onmicrosoft.com"],
+     "aliases": ["outlook", "hotmail", "office365", "sharepoint"]},
+    {"label": "apple",     "domains": ["apple.com", "icloud.com", "apple-dns.net", "cdn-apple.com", "apple-cloudkit.com", "icloud-content.com", "edge.apple", "safebrowsing.apple"], "aliases": ["icloud"]},
+    {"label": "amazon",    "domains": ["amazon.com", "amazon.co.jp", "amazon-adsystem.com", "media-amazon.com", "ssl-images-amazon.com"]},
     {"label": "netflix",   "domains": ["netflix.com"]},
     {"label": "paypal",    "domains": ["paypal.com"]},
     {"label": "shopee",    "domains": ["shopee.co.th", "shopee.com"]},
     {"label": "lazada",    "domains": ["lazada.co.th", "lazada.com"]},
+    # ---- ธนาคารต่างประเทศที่ถูกปลอมบ่อย ----
+    {"label": "bankofamerica", "domains": ["bankofamerica.com"], "aliases": ["bofa"]},
+    {"label": "wellsfargo", "domains": ["wellsfargo.com"]},
+    {"label": "santander",  "domains": ["santander.com", "santander.co.uk"]},
+    {"label": "barclays",   "domains": ["barclays.co.uk", "barclays.com"]},
+    {"label": "revolut",    "domains": ["revolut.com"]},
+    {"label": "wise",       "domains": ["wise.com", "transferwise.com"]},
+    # ---- กระเป๋าเงินคริปโต / ตลาดแลกเปลี่ยน ที่ถูกปลอมบ่อยมาก ----
+    {"label": "imtoken",    "domains": ["token.im", "imtoken.io"]},
+    {"label": "metamask",   "domains": ["metamask.io"]},
+    {"label": "trustwallet", "domains": ["trustwallet.com"]},
+    {"label": "bitkub",     "domains": ["bitkub.com"]},
+    {"label": "kraken",     "domains": ["kraken.com"]},
+    {"label": "ledger",     "domains": ["ledger.com"]},
+    {"label": "phantom",    "domains": ["phantom.app"]},
     # ---- โซเชียล / แชท ----
-    {"label": "tiktok",    "domains": ["tiktok.com"]},
-    {"label": "twitter",   "domains": ["twitter.com", "x.com", "t.co"]},
+    {"label": "tiktok",    "domains": ["tiktok.com", "tiktokv.com", "tiktokv.eu", "tiktokv.us", "tiktokw.us"]},
+    {"label": "twitter",   "domains": ["twitter.com", "x.com", "t.co", "ads-twitter.com"]},
     {"label": "whatsapp",  "domains": ["whatsapp.com", "wa.me"]},
-    {"label": "telegram",  "domains": ["telegram.org", "t.me"]},
+    {"label": "telegram",  "domains": ["telegram.org", "t.me", "telegra.ph"]},
     {"label": "discord",   "domains": ["discord.com", "discord.gg"]},
     {"label": "linkedin",  "domains": ["linkedin.com"]},
     # ---- เทคโนโลยี / บริการออนไลน์ ----
     {"label": "github",    "domains": ["github.com"]},
     {"label": "adobe",     "domains": ["adobe.com"]},
-    {"label": "dropbox",   "domains": ["dropbox.com"]},
+    {"label": "dropbox",   "domains": ["dropbox.com", "dropbox-dns.com"]},
     {"label": "zoom",      "domains": ["zoom.us", "zoom.com"]},
     {"label": "spotify",   "domains": ["spotify.com"]},
     {"label": "samsung",   "domains": ["samsung.com"]},
@@ -60,7 +75,7 @@ BRANDS = [
     {"label": "uob",       "domains": ["uob.co.th", "uobgroup.com"]},
     # ---- ช้อปปิ้ง / เดินทาง / ขนส่ง ----
     {"label": "ebay",      "domains": ["ebay.com"]},
-    {"label": "aliexpress", "domains": ["aliexpress.com", "alibaba.com"]},
+    {"label": "aliexpress", "domains": ["aliexpress.com", "alibaba.com", "aliexpress-media.com"]},
     {"label": "temu",      "domains": ["temu.com"]},
     {"label": "agoda",     "domains": ["agoda.com"]},
     {"label": "booking",   "domains": ["booking.com"]},
@@ -119,12 +134,113 @@ USER_CONTENT_DOMAINS = {
     # DNS ฟรี/ไดนามิก ที่มิจฉาชีพใช้บ่อย
     "duckdns.org", "no-ip.org", "ddns.net", "serveo.net", "ngrok.io",
     "ngrok-free.app", "loca.lt",
+    # ---- เพิ่มจากการวัดผลกับ testset_100.json (ลิงก์ฟิชชิ่งที่ยังทำงานอยู่จริง) ----
+    # ทั้งกลุ่มนี้ "อันดับความนิยมสูง" เพราะเป็นแพลตฟอร์ม แต่หน้าที่อยู่ข้างในเป็นของ
+    # ผู้ใช้คนไหนก็ได้ ถ้าไม่ใส่ไว้ตรงนี้ คะแนนความนิยม (popularity.py) จะยกเครดิตของ
+    # แพลตฟอร์มไปให้หน้าฟิชชิ่งที่ฝากอยู่ข้างใน — amazonaws.com อยู่อันดับ 7 ของโลก
+    "amazonaws.com",      # S3 bucket สาธารณะ ใครก็อัปหน้าเว็บขึ้นได้
+    "mybluehost.me",      # โดเมนชั่วคราวที่ Bluehost แจกให้ลูกค้าตอนยังไม่ผูกโดเมนจริง
+    "tempurl.host",       # โดเมนชั่วคราวของโฮสติ้ง ลักษณะเดียวกัน
+    "eu.org",             # แจกโดเมนย่อยฟรี
+    "dweb.link",          # IPFS gateway — เนื้อหามาจากผู้อัปโหลด ไม่ใช่เจ้าของโดเมน
+    "avnam.net", "tepuyserver.net",   # shared hosting ที่พบว่าถูกใช้ฝากหน้าฟิชชิ่ง
+
+    # ---- จากการไล่รายการโดเมนยอดนิยม 10,000 อันดับแรกทีละอัน ----
+    # ทุกอันในกลุ่มนี้คือ "โดเมนของแพลตฟอร์ม แต่หน้าเว็บเป็นของผู้ใช้คนไหนก็ได้"
+    # ถ้าไม่ใส่ไว้ หน้าฟิชชิ่งที่ฝากอยู่ข้างในจะได้เขียวจากอันดับของแพลตฟอร์มทันที
+    # (อันดับในวงเล็บ = ตอนที่ตรวจ ก.ย. 2026)
+    # CDN / ที่เก็บไฟล์ที่ใครก็อัปได้
+    "cloudfront.net", "b-cdn.net", "cloudflarestorage.com", "windows.net",
+    "appspot.com", "sharepoint.com", "box.com", "mediafire.com",
+    "ipfs.io", "pinata.cloud",
+    # ลิงก์รวมโปรไฟล์ (link-in-bio) — หน้าเดียวที่เจ้าของใส่ลิงก์อะไรก็ได้
+    "linktr.ee", "bio.link", "beacons.ai", "taplink.cc", "linkin.bio", "carrd.co",
+    # ฟอร์มออนไลน์ — ใช้ทำหน้าเก็บรหัสผ่าน/เลขบัตรได้ตรง ๆ โดยไม่ต้องเขียนเว็บเอง
+    "forms.gle", "g.page", "jotform.com", "typeform.com", "wufoo.com", "formspree.io",
+    # เครื่องมือสร้างเว็บ/โน้ตสาธารณะ
+    "notion.site", "notion.so", "canva.site", "strikingly.com", "jimdosite.com",
+    "yolasite.com", "tilda.ws", "readymag.com", "webnode.page",
+    # โฮสต์ฟรีที่มิจฉาชีพใช้บ่อย
+    "000webhostapp.com", "infinityfree.com", "byethost.com", "rf.gd", "epizy.com",
+    "hpage.com",
+    # sandbox ของนักพัฒนา (รันหน้าเว็บของใครก็ได้บนโดเมนของแพลตฟอร์ม)
+    "codesandbox.io", "stackblitz.io", "gitee.io", "vercel.sh",
+    # แพลตฟอร์มเนื้อหา — เชื่อบริษัทได้ แต่หน้าที่ผู้ใช้เขียนเองยืนยันให้ไม่ได้
+    # (กลุ่มนี้ใช้กฎเรื่องแบรนด์ต่างจากกลุ่มอื่น — ดู PUBLISHING_DOMAINS ข้างล่าง)
+    "medium.com", "substack.com", "soundcloud.com", "bsky.app",
+}
+
+# กลุ่มย่อยของ USER_CONTENT_DOMAINS: แพลตฟอร์ม "เผยแพร่บทความ/สื่อ"
+# ต่างจากแพลตฟอร์มฝากเว็บตรงที่ **path คือชื่อบทความที่คนเขียนตั้งเอง ไม่ใช่โครงเว็บ
+# ที่เจ้าของหน้าออกแบบ** — บทความชื่อ /why-facebook-changed-its-name เป็นเรื่องปกติ
+# ที่สุดของเว็บเขียนบทความ ถ้าใช้กฎ user_content_brand (critical) กับ path ของกลุ่มนี้
+# บทความทุกชิ้นที่พูดถึงแบรนด์จะกลายเป็นแดงทันที ซึ่งผิดชัดเจน
+#
+# กลุ่มนี้จึงดูชื่อแบรนด์เฉพาะใน "โดเมนย่อย" (facebook-login.medium.com = เจตนาปลอม
+# เหมือนเดิม) ส่วนชื่อแบรนด์ใน path ตกไปใช้กฎ brand_in_path ปกติซึ่งเป็นแค่ข้อสังเกต
+# — และยังไม่ได้เขียวอยู่ดีเพราะติด user_content_host
+PUBLISHING_DOMAINS = {
+    "medium.com", "substack.com", "soundcloud.com", "bsky.app",
 }
 
 # นามสกุลโดเมน 2 ชั้น ที่ต้องรู้จัก (กันปัญหา co.th / go.th ถูกตัดผิด)
+# โดเมนขององค์กรจริงที่ "บังเอิญ" สะกดใกล้เคียงชื่อแบรนด์ในลิสต์ จนกฎ typosquatting
+# เข้าใจผิดว่าเป็นของปลอม ทุกรายการตรวจสอบด้วยมือแล้วว่าเป็นองค์กรที่มีอยู่จริง
+# และติดอันดับเว็บยอดนิยมของโลก ไม่ใช่โดเมนที่ตั้งขึ้นมาเพื่อหลอก
+#
+# วิธีเพิ่มรายการใหม่: ต้องยืนยันก่อนว่าเป็นองค์กรจริง อย่าใส่เพียงเพราะอยากให้
+# ผลทดสอบดูดีขึ้น เพราะรายการนี้คือการ "ยกเว้นไม่ตรวจ" ซึ่งเป็นช่องโหว่ถ้าใส่ผิด
+SIMILARITY_EXCEPTIONS = {
+    "agora.io",         # Agora บริษัทผู้ให้บริการ API วิดีโอคอล (ใกล้เคียง agoda)
+    "ficbook.net",      # เว็บนิยายแฟนฟิคของรัสเซีย (ใกล้เคียง facebook)
+    "tbank.ru",         # T-Bank ธนาคารของรัสเซีย (ใกล้เคียง kbank)
+    "telegraph.co.uk",  # หนังสือพิมพ์ The Telegraph ของอังกฤษ (ใกล้เคียง telegram)
+}
+
+# คำบอกประเภทที่ใช้เป็นชั้นกลางของนามสกุลโดเมนประเทศ เช่น google.co.ve, uni.ac.za
+# ใช้คู่กับกฎ "<คำเหล่านี้>.<รหัสประเทศ 2 ตัว>" ใน url_parser เพื่อไม่ต้องไล่ใส่
+# นามสกุลสองชั้นของทุกประเทศทีละรายการ
+GENERIC_SECOND_LEVELS = {
+    "co", "com", "net", "org", "gov", "edu", "ac", "or", "ne", "go",
+    "mil", "sch", "web", "biz", "info", "name", "int", "res", "gob",
+}
+
 MULTI_SUFFIXES = {
+    # ---- ไทย ----
     "co.th", "go.th", "ac.th", "or.th", "in.th", "net.th", "mi.th",
-    "co.uk", "org.uk", "gov.uk", "ac.uk", "co.jp", "com.au", "com.sg", "com.my", "com.cn",
+    # ---- ยุโรป ----
+    "co.uk", "org.uk", "gov.uk", "ac.uk", "me.uk", "net.uk", "sch.uk",
+    "com.tr", "com.ua", "com.ru", "com.pl", "com.es", "com.pt", "com.gr",
+    "co.rs", "com.hr", "com.cy",
+    # ---- เอเชีย ----
+    "co.jp", "ne.jp", "or.jp", "ac.jp", "go.jp",
+    "co.kr", "or.kr", "ne.kr", "go.kr",
+    "com.cn", "net.cn", "org.cn", "gov.cn", "edu.cn",
+    "com.tw", "org.tw", "gov.tw", "edu.tw",
+    "com.hk", "org.hk", "edu.hk", "gov.hk",
+    "com.sg", "edu.sg", "gov.sg",
+    "com.my", "edu.my", "gov.my", "org.my",
+    "co.id", "or.id", "ac.id", "go.id", "web.id", "my.id",
+    "com.ph", "edu.ph", "gov.ph",
+    "com.vn", "edu.vn", "gov.vn", "net.vn",
+    "co.in", "net.in", "org.in", "gov.in", "ac.in", "edu.in",
+    "com.bd", "com.pk", "com.np", "com.kh", "com.la", "com.mm",
+    # ---- ตะวันออกกลาง ----
+    "co.il", "com.sa", "com.eg", "com.kw", "com.qa", "com.bh", "com.jo",
+    "com.lb", "com.om", "ae.org",
+    # ---- อเมริกาใต้ / กลาง — กลุ่มที่มิจฉาชีพนิยมจดมาก ----
+    "com.br", "net.br", "org.br", "gov.br", "edu.br",
+    "com.ar", "com.mx", "com.co", "com.pe", "com.ve", "com.uy",
+    "com.py", "com.bo", "com.ec", "com.do", "com.gt", "com.pa",
+    "com.ni", "com.sv", "com.hn", "com.cu", "cl.cl",
+    # ---- แอฟริกา / โอเชียเนีย ----
+    "co.za", "org.za", "gov.za", "ac.za",
+    "com.ng", "com.gh", "co.ke", "co.tz", "co.ug", "com.et",
+    "com.au", "net.au", "org.au", "edu.au", "gov.au", "id.au",
+    "co.nz", "net.nz", "org.nz", "govt.nz", "ac.nz",
+    # ---- อเมริกาเหนือ / อื่น ๆ ----
+    "com.ca", "gc.ca", "on.ca", "qc.ca", "bc.ca",
+    "com.tt", "com.jm", "co.cr",
 }
 
 # ข้อมูลความรู้ของนามสกุลโดเมนที่พบบ่อย (ใช้อธิบายในรายละเอียดทางเทคนิค)
@@ -165,6 +281,8 @@ RISKY_TLDS = {
 SHORTENERS = {
     "bit.ly", "goo.gl", "tinyurl.com", "t.co", "ow.ly", "is.gd", "buff.ly",
     "rebrand.ly", "cutt.ly", "shorturl.at", "lin.ee", "s.id", "rb.gy",
+    # เพิ่มจากการไล่รายการโดเมนยอดนิยม (ดูหมายเหตุใน USER_CONTENT_DOMAINS)
+    "tiny.cc", "v.gd", "u.to", "onelink.me",
 }
 
 # นามสกุลไฟล์ที่ "รันหรือติดตั้งได้" — ลิงก์ที่ปลายทางเป็นไฟล์พวกนี้ = กดแล้วได้
@@ -208,15 +326,12 @@ WEIGHTS = {
     # (เช่น amazon.co.jp ของจริงที่ลิสต์เราไม่ครบ vs amazon.xyz ของปลอม)
     # ตัดสินจากชื่ออย่างเดียวไม่ได้ ให้ระดับกลางแล้วพึ่งสัญญาณอื่นร่วมตัดสิน
     "brand_bare_domain":   (3, "high"),
-<<<<<<< Updated upstream
-=======
     # หน้าเว็บฝากอยู่บนโดเมนที่ใครก็สมัครได้ — ไม่ผิดในตัวเอง (นักเรียน/นักพัฒนาใช้กันปกติ)
     # จึงให้คะแนนต่ำ หน้าที่หลักของสัญญาณนี้คือ "กันไม่ให้ได้เขียว" มากกว่าการทำให้แดง
     "user_content_host":   (1, "low"),
     # แต่ถ้าเอาชื่อแบรนด์อื่นมาตั้งเป็นชื่อโดเมนย่อย/path บนพื้นที่ฝากฟรี = เจตนาปลอมชัด
     # (เช่น aryama10.github.io/facebook-login-page) ไม่มีเหตุผลสุจริตที่จะทำแบบนี้
     "user_content_brand":  (6, "critical"),
->>>>>>> Stashed changes
     "typosquatting":       (6, "critical"),
     "ip_host":             (5, "critical"),
     "userinfo_at":         (5, "critical"),
@@ -272,6 +387,65 @@ WEIGHTS = {
 }
 
 # ---------------------------------------------------------------------------
+# หลักฐานฝั่ง "ปลอดภัย" (trust evidence)
+# ---------------------------------------------------------------------------
+# ปัญหาที่ตารางข้างบนแก้ไม่ได้: WEIGHTS ทั้งหมดเป็นคะแนน "เสี่ยง" ล้วน ระบบจึงมีทาง
+# ตอบเขียวอยู่ทางเดียวคือโดเมนตรงกับลิสต์ BRANDS เป๊ะ ผลคือเว็บสุจริตที่ไม่ได้อยู่ในลิสต์
+# — มหาวิทยาลัยไทย หน่วยงานราชการ วิกิพีเดีย — ได้ "เหลือง" ทั้งหมดตลอดกาล
+# ไม่ว่าจะสะอาดแค่ไหน (วัดกับ testset_100.json: safe 50 ลิงก์ ได้เขียวแค่ 18)
+#
+# ตารางนี้คือหลักฐานอีกด้าน "อะไรบ้างที่ยืนยันได้ว่าเว็บนี้เป็นของจริง"
+#
+# กติกาสำคัญ 3 ข้อ (ห้ามแก้โดยไม่คิดให้ครบ):
+#   1) **หลักฐานฝั่งปลอดภัยไม่หักคะแนนความเสี่ยง** ทุกสัญญาณในกลุ่มนี้ points = 0 เสมอ
+#      ถ้ายอมให้หักคะแนนได้ เว็บอันตรายที่บังเอิญมีจุดน่าเชื่อถือ (เช่นโดเมนเก่า) จะ
+#      ลดตัวเองจากแดงเป็นเหลืองได้ — ระบบเตือนภัยต้องไม่มีทางถูกกล่อมให้เงียบลง
+#   2) เขียวได้ต้อง "ไม่มีสัญญาณเสี่ยงเหลืออยู่เลยแม้แต่ตัวเดียว" จากทุกชั้นรวมกัน
+#      หลักฐานฝั่งนี้ใช้ยกระดับจาก "เหลืองเพราะไม่รู้จัก" เป็นเขียวเท่านั้น
+#      ไม่ได้ใช้กลบสัญญาณเสี่ยง (บังคับใช้ที่ scanner._trust_grants_green)
+#   3) พื้นที่ฝากเว็บฟรี (USER_CONTENT_DOMAINS) และลิงก์ย่อ ไม่มีสิทธิ์ได้หลักฐานฝั่งนี้
+#      เลยไม่ว่าข้อไหน — เชื่อบริษัทเจ้าของโดเมนได้ แต่เชื่อของที่คนอื่นเอามาฝากไม่ได้
+
+# นามสกุลที่ "นายทะเบียนบังคับให้พิสูจน์ตัวตนก่อนถึงจะจดได้ และผู้จดต้องเป็นหน่วยงาน
+# ของรัฐหรือสถานศึกษาเท่านั้น" — มิจฉาชีพจดไม่ได้จริง ๆ ไม่ใช่แค่จดยาก
+# จึงเป็นหลักฐานที่หนักพอจะให้เขียวได้ด้วยตัวเองถ้าไม่มีสัญญาณเสี่ยงอื่นเลย
+# ที่มา: ระเบียบการจดทะเบียนโดเมน .th ของ THNIC (ต้องยื่นหนังสือจากหน่วยงานต้นสังกัด)
+RESTRICTED_TLDS = {
+    "go.th":  "สงวนให้หน่วยงานราชการไทย ต้องยื่นหนังสือจากหน่วยงานต้นสังกัดถึงจะจดได้",
+    "ac.th":  "สงวนให้สถานศึกษาในไทย ต้องมีหนังสือรับรองจากหน่วยงานที่กำกับดูแล",
+    "mi.th":  "สงวนให้หน่วยงานทางทหารของไทยเท่านั้น",
+    "gov.uk": "สงวนให้หน่วยงานรัฐบาลสหราชอาณาจักรเท่านั้น",
+}
+
+# นามสกุลที่ต้องใช้เอกสารนิติบุคคลถึงจะจดได้ — พิสูจน์ได้แค่ว่า "มีตัวตนตามกฎหมาย
+# และตามตัวได้" ไม่ได้แปลว่าเนื้อหาปลอดภัย (บริษัทจริงถูกแฮกได้ และจดบริษัทเพื่อหลอก
+# ก็ทำได้ถ้ายอมทิ้งหลักฐาน) จึงให้ครึ่งเดียว ต้องมีหลักฐานอื่นมาประกอบถึงจะเขียว
+VERIFIED_ORG_TLDS = {
+    "co.th":  "ต้องใช้หนังสือรับรองบริษัทหรือเครื่องหมายการค้าที่จดทะเบียนในไทย",
+    "or.th":  "ต้องใช้เอกสารจดทะเบียนองค์กร/มูลนิธิ/สมาคมในไทย",
+    "net.th": "สงวนให้ผู้ให้บริการเครือข่ายที่ได้รับใบอนุญาตในไทย",
+    "co.jp":  "ต้องเป็นบริษัทที่จดทะเบียนในญี่ปุ่น",
+}
+
+# ความนิยมของโดเมน (ดู popularity.py) — (อันดับไม่เกิน, น้ำหนักหลักฐาน)
+# เรียงจากเข้มไปอ่อน ใช้อันแรกที่เข้าเงื่อนไข
+#   top 10,000  = เว็บที่คนทั้งโลกใช้จริงทุกวัน ของปลอมไม่มีทางไต่มาถึงตรงนี้
+#   top 100,000 = มีคนใช้จริงพอสมควร เป็นหลักฐานประกอบได้ แต่ไม่พอให้เขียวเดี่ยว ๆ
+#                 (โฮสติ้งที่ถูกแฮกแล้วเอามาฝากหน้าฟิชชิ่งตกอยู่ในช่วงนี้ได้ — วัดจาก
+#                  testset พบ avnam.net อันดับ 52,939 และ tepuyserver.net 34,179)
+POPULARITY_TIERS = ((10_000, 4), (100_000, 2))
+
+# น้ำหนักของหลักฐานแต่ละชนิด (points ในสัญญาณเป็น 0 เสมอ — ดูกติกาข้อ 1 ข้างบน)
+TRUST_WEIGHTS = {
+    "restricted_tld":   4,   # นามสกุลสงวนสำหรับราชการ/สถานศึกษา -> เขียวได้เดี่ยว
+    "verified_org_tld": 2,   # นามสกุลที่ต้องใช้เอกสารนิติบุคคล -> เป็นหลักฐานประกอบ
+    # popular_domain ใช้น้ำหนักจาก POPULARITY_TIERS ตามอันดับที่ค้นเจอ
+}
+
+# ต้องมีน้ำหนักหลักฐานฝั่งปลอดภัยรวมถึงเท่านี้ถึงจะยกจากเหลืองเป็นเขียวได้
+GREEN_TRUST = 4
+
+# ---------------------------------------------------------------------------
 # กฎการรวมสัญญาณ (combination rules)
 # ---------------------------------------------------------------------------
 # ปัญหาของการบวกคะแนนตรง ๆ: หน้าเว็บที่ ① อ้างชื่อธนาคาร ② มีช่องรหัสผ่าน ③ โดเมน
@@ -285,6 +459,15 @@ WEIGHTS = {
 #   - has_password_input เป็น "ข้อเท็จจริง" ไม่ใช่สัญญาณเสี่ยง ไม่มีคะแนนในตัวเอง
 #     (เว็บล็อกอินจริงทุกเว็บก็มี) แต่ใช้เป็นเงื่อนไขของ combo ได้
 COMBO_RULES = [
+    {
+        "id": "combo_bare_brand_risky_tld",
+        "needs": {"brand_bare_domain", "risky_tld"},
+        "bonus": 4,
+        "title": "โดเมนใช้ชื่อแบรนด์ตรง ๆ บนนามสกุลที่มิจฉาชีพนิยม",
+        "detail": "แบรนด์ที่มีโดเมนภูมิภาคจริงจะจดบนนามสกุลประจำประเทศตามปกติ "
+                  "ไม่มีเหตุผลที่จะย้ายไปอยู่บนนามสกุลราคาถูกที่พบในเว็บหลอกบ่อย "
+                  "การเอาชื่อแบรนด์ไปวางบนนามสกุลกลุ่มนี้จึงแทบไม่มีคำอธิบายที่สุจริต",
+    },
     {
         "id": "combo_brand_password",
         "needs": {"content_brand_mismatch", "has_password_input"},

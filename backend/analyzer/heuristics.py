@@ -9,12 +9,12 @@ heuristics.py
 import re
 from urllib.parse import unquote
 
-from .config import (BRANDS, RISKY_TLDS, SHORTENERS, LURE_KEYWORDS, WEIGHTS,
-<<<<<<< Updated upstream
-                     EXECUTABLE_EXTENSIONS)
-=======
-                     EXECUTABLE_EXTENSIONS, USER_CONTENT_DOMAINS)
->>>>>>> Stashed changes
+from . import popularity
+from .config import (BRANDS, RISKY_TLDS, SIMILARITY_EXCEPTIONS, SHORTENERS, LURE_KEYWORDS, WEIGHTS,
+                     EXECUTABLE_EXTENSIONS, USER_CONTENT_DOMAINS,
+                     PUBLISHING_DOMAINS, RESTRICTED_TLDS, VERIFIED_ORG_TLDS,
+                     POPULARITY_TIERS,
+                     TRUST_WEIGHTS)
 
 # ร่องรอยของโค้ดสคริปต์ในพารามิเตอร์ลิงก์ (ลิงก์ยิง XSS ใส่เว็บปลายทาง)
 # เลือกเฉพาะรูปแบบที่แทบไม่มีทางโผล่ใน URL ปกติ — "javascript" เฉย ๆ ไม่นับ
@@ -61,10 +61,75 @@ def _signal(key: str, title: str, detail: str) -> dict:
             "points": points, "severity": severity}
 
 
+def _trust(key: str, weight: int, title: str, detail: str) -> dict:
+    """สร้าง "หลักฐานฝั่งปลอดภัย" — points = 0 เสมอโดยตั้งใจ
+    ห้ามให้หลักฐานฝั่งนี้หักคะแนนความเสี่ยงเด็ดขาด ไม่งั้นเว็บอันตรายที่บังเอิญมีจุด
+    น่าเชื่อถือจะกล่อมระบบให้ลดระดับเตือนของตัวเองได้ (ดูเหตุผลเต็มใน config.py)
+    น้ำหนักไปอยู่ที่คีย์ "trust" แยกต่างหาก ให้ scanner ใช้ตัดสินเรื่องเขียวอย่างเดียว"""
+    return {"id": key, "title": title, "detail": detail,
+            "points": 0, "severity": "good", "trust": weight}
+
+
+def collect_trust(parsed: dict) -> list:
+    """รวบรวมหลักฐานที่บอกว่า "เว็บนี้เป็นของจริง" จากตัวลิงก์ล้วน ๆ (ไม่ยิงเน็ต)
+
+    คืนลิสต์แยกจาก signals โดยตั้งใจ — ไม่ปนกับสัญญาณเสี่ยง เพื่อให้แน่ใจว่า:
+      - ไม่ถูกนับเข้า score (คะแนนความเสี่ยงต้องไม่ถูกหักด้วยเหตุผลใด ๆ)
+      - ไม่ถูก _merge_destination_analysis ดึงข้ามจาก "ปลายทาง" มาให้ต้นทาง
+        (ลิงก์ที่ redirect ไปจบที่เว็บดังต้องไม่ได้เขียวเพราะปลายทาง — กติกาเดิมของระบบ)
+    """
+    reg = (parsed.get("registrable") or "").lower()
+    tld = (parsed.get("tld") or "").lower()
+
+    # เลข IP ไม่มีตัวตนให้ยืนยัน และไม่มีนายทะเบียนคนไหนตรวจเอกสารให้
+    if parsed.get("is_ip") or not reg:
+        return []
+    # พื้นที่ฝากเว็บฟรี + ลิงก์ย่อ: เครดิตทั้งหมดเป็นของแพลตฟอร์ม ไม่ใช่ของหน้าที่ตรวจอยู่
+    # นี่คือด่านที่สำคัญที่สุดของทั้งฟังก์ชัน — ถ้าไม่มีบรรทัดนี้ หน้าฟิชชิ่งบน
+    # amazonaws.com (อันดับ 7 ของโลก) หรือ github.io (121) จะได้เขียวไปฟรี ๆ
+    if reg in USER_CONTENT_DOMAINS or reg in SHORTENERS:
+        return []
+
+    trust = []
+
+    # 1) นามสกุลสงวนที่ต้องมีเอกสารราชการถึงจะจดได้
+    if tld in RESTRICTED_TLDS:
+        trust.append(_trust(
+            "restricted_tld", TRUST_WEIGHTS["restricted_tld"],
+            f"เป็นนามสกุลที่สงวนไว้เฉพาะหน่วยงาน (.{tld})",
+            f"{RESTRICTED_TLDS[tld]} — มิจฉาชีพจดโดเมนแบบนี้ไม่ได้ "
+            f"จึงยืนยันได้ว่า {reg} เป็นของหน่วยงานจริง"))
+    # 2) นามสกุลที่ต้องใช้เอกสารนิติบุคคล (อ่อนกว่าข้อ 1 — ยืนยันได้แค่ว่ามีตัวตนตามกฎหมาย)
+    elif tld in VERIFIED_ORG_TLDS:
+        trust.append(_trust(
+            "verified_org_tld", TRUST_WEIGHTS["verified_org_tld"],
+            f"เป็นนามสกุลที่ต้องใช้เอกสารนิติบุคคล (.{tld})",
+            f"{VERIFIED_ORG_TLDS[tld]} — ผู้จดโดเมนมีตัวตนตามกฎหมายและตามตัวได้ "
+            f"แต่ยังไม่ได้แปลว่าเนื้อหาในเว็บปลอดภัย"))
+
+    # 3) ความนิยม — เทียบกับรายการอันดับในเครื่อง ไม่มีการยิงออกไปหาเว็บที่กำลังตรวจ
+    r = popularity.rank(reg)
+    if r:
+        weight = next((w for limit, w in POPULARITY_TIERS if r <= limit), 0)
+        if weight:
+            trust.append(_trust(
+                "popular_domain", weight,
+                f"เป็นเว็บที่มีคนใช้งานจริงจำนวนมาก (อันดับ {r:,} ของโลก)",
+                f"โดเมน {reg} อยู่อันดับที่ {r:,} ของรายการเว็บที่มีการเข้าใช้มากที่สุด "
+                f"เว็บหลอกที่เพิ่งสร้างขึ้นมาไม่มีทางมีผู้ใช้มากขนาดนี้ "
+                f"(เทียบจากรายการที่เก็บไว้ในเครื่อง ไม่ได้ติดต่อไปยังเว็บนั้น)"))
+
+    return trust
+
+
 def analyze(parsed: dict) -> dict:
     """
     รับผลจาก parse_url คืน:
-      { score, signals: [...], verified_safe: bool, legit_brand: str|None }
+      { score, signals: [...], verified_safe: bool, legit_brand: str|None,
+        trust: [...] }
+
+    signals = สัญญาณ "เสี่ยง" (มีคะแนน) / trust = หลักฐาน "ปลอดภัย" (ไม่มีคะแนน)
+    แยกกันคนละลิสต์โดยตั้งใจ — score คิดจาก signals อย่างเดียวเสมอ ดู collect_trust()
     """
     signals = []
     reg = parsed.get("registrable", "")
@@ -76,17 +141,27 @@ def analyze(parsed: dict) -> dict:
     # 0) ตรงกับโดเมนจริงของแบรนด์เป๊ะ -> ปลอดภัย (ลัดออก)
     #    ยกเว้นโดเมนประเภทให้คนอื่นมาฝากเว็บ (github.io ฯลฯ) ที่ต้องตรวจต่อเสมอ
     #    เพราะสิ่งที่เชื่อได้คือ "ตัวบริษัทเจ้าของโดเมน" ไม่ใช่ "เนื้อหาที่คนอื่นเอามาฝาก"
+    tld = parsed.get("tld", "")
     is_user_content = reg in USER_CONTENT_DOMAINS
+    # แพลตฟอร์มเผยแพร่บทความ (medium/substack/...) — path คือชื่อบทความ ไม่ใช่โครงเว็บ
+    # ที่คนทำหน้าปลอมออกแบบเอง จึงใช้กฎเรื่องแบรนด์ต่างจากพื้นที่ฝากเว็บทั่วไป
+    is_publishing = is_user_content and reg in PUBLISHING_DOMAINS
+    brand_hit_on_host = False   # เจอชื่อแบรนด์บนพื้นที่ฝากฟรีไปแล้ว (กันนับซ้ำ)
     if not is_user_content:
         for b in BRANDS:
-            if reg in b["domains"]:
+            # นามสกุลโดเมนที่เป็นชื่อแบรนด์เอง (.google .microsoft .apple .amazon)
+            # เป็นนามสกุลที่บริษัทนั้นซื้อไว้ทั้งอัน คนนอกจดไม่ได้ ทุกอย่างที่ลงท้าย
+            # ด้วยนามสกุลนี้จึงเป็นของบริษัทนั้นแน่นอน เช่น gemini.google, edge.apple
+            # ถ้าไม่มีกฎนี้ ระบบจะอ่านว่า "มีชื่อแบรนด์แต่ไม่ตรงโดเมนทางการ" แล้วขึ้นแดง
+            if tld == b["label"] or reg in b["domains"]:
                 signals.append({
                     "id": "verified_brand",
                     "title": f"ตรงกับโดเมนทางการของ {b['label'].upper()}",
                     "detail": f"โดเมน {reg} อยู่ในรายชื่อโดเมนจริงที่ตรวจสอบแล้ว",
                     "points": 0, "severity": "good",
                 })
-                return {"score": 0, "signals": signals,
+                # ยืนยันจากลิสต์โดเมนทางการแล้ว เขียวได้เลยโดยไม่ต้องพึ่งหลักฐานอื่น
+                return {"score": 0, "signals": signals, "trust": [],
                         "verified_safe": True, "legit_brand": b["label"]}
     else:
         # เว็บที่ฝากบนพื้นที่ฟรี: ตัวมันเองไม่ผิด แต่ยืนยันความปลอดภัยให้ไม่ได้
@@ -107,13 +182,17 @@ def analyze(parsed: dict) -> dict:
         sub = (parsed.get("subdomain", "") or "").lower()
         sub_is_exact_brand = any(sub == n for b in BRANDS
                                  for n in [b["label"]] + b.get("aliases", []))
+        # เว็บเขียนบทความดูเฉพาะโดเมนย่อย — ชื่อแบรนด์ใน path คือชื่อบทความ ปล่อยให้
+        # กฎ brand_in_path ปกติจัดการ (ไม่งั้นบทความข่าวทุกชิ้นกลายเป็นแดง)
+        brand_field = sub if is_publishing else (sub + " " + path.lower())
         if not sub_is_exact_brand:
             for b in BRANDS:
                 names = [b["label"]] + b.get("aliases", [])
                 hit = next((n for n in names
                             if re.search(r"(^|[^a-z])" + re.escape(n) + r"([^a-z]|$)",
-                                         sub + " " + path.lower())), None)
+                                         brand_field)), None)
                 if hit:
+                    brand_hit_on_host = True
                     sig = _signal(
                         "user_content_brand",
                         f"ใช้ชื่อ {hit.upper()} บนพื้นที่เว็บฟรี",
@@ -147,14 +226,14 @@ def analyze(parsed: dict) -> dict:
     #     ปกติ = medium และมี combo เพิ่มคะแนนถ้าหน้านั้นขอรหัสผ่านด้วย
     host_l = host.lower()
     path_l = path.lower()
-<<<<<<< Updated upstream
-    for b in BRANDS:
-=======
     # โดเมนพื้นที่ฝากฟรีตรวจเรื่องแบรนด์ไปแล้วข้างบน (user_content_brand) จึงข้ามกฎนี้
     # ไม่งั้นจะนับซ้ำ และคำว่า "github" ใน github.io ก็จะถูกอ่านว่าเป็นการปลอมแบรนด์
     # ทั้งที่มันคือชื่อแพลตฟอร์มตามปกติ ทำให้เว็บ github.io ทุกหน้าติดสัญญาณผิด ๆ
-    for b in ([] if is_user_content else BRANDS):
->>>>>>> Stashed changes
+    #
+    # ข้อยกเว้น: เว็บเขียนบทความที่ยังไม่เจอแบรนด์ในโดเมนย่อย ต้องให้กฎชุดนี้ทำงาน
+    # เพื่อให้ชื่อแบรนด์ใน path ได้ brand_in_path (ข้อสังเกต) แทน user_content_brand (แดง)
+    skip_brand_rules = is_user_content and (not is_publishing or brand_hit_on_host)
+    for b in ([] if skip_brand_rules else BRANDS):
         names = [b["label"]] + b.get("aliases", [])
         found = next((n for n in names
                       if re.search(r"(^|[^a-z])" + re.escape(n) + r"([^a-z]|$)", host_l)), None)
@@ -186,7 +265,8 @@ def analyze(parsed: dict) -> dict:
             break
 
     # 2) สะกดใกล้เคียงแบรนด์ (typosquatting / ตัวอักษรปลอม / ซ่อนแบรนด์ด้วยเลข)
-    if not parsed.get("is_ip"):
+    #    ข้ามโดเมนขององค์กรจริงที่บังเอิญสะกดใกล้แบรนด์ (ดู SIMILARITY_EXCEPTIONS)
+    if not parsed.get("is_ip") and reg not in SIMILARITY_EXCEPTIONS:
         norm_label = normalize_glyphs(main_label)
         norm_host = normalize_glyphs(host)
         for b in BRANDS:
@@ -207,7 +287,27 @@ def analyze(parsed: dict) -> dict:
             # แต่ไม่โผล่ในโฮสต์ตัวจริง (เช่น g00gle-account, micros0ft-login)
             pat = r"(^|[^a-z])" + re.escape(label) + r"([^a-z]|$)"
             hidden = bool(re.search(pat, norm_host)) and not re.search(pat, host)
-            if glyph_same or close or hidden:
+            # แบรนด์ถูกซ่อนไว้หลังขีดหรือจุด เช่น whtsapp-serve.chat, secure-paypa1.com
+            # เดิมเทียบทั้งก้อน "whtsapp-serve" กับ "whatsapp" ซึ่งห่างกันเกินเกณฑ์เสมอ
+            # จึงตัดชื่อโดเมนตามขีด/ขีดล่าง แล้วเทียบทีละชิ้น
+            # จำกัดเฉพาะแบรนด์ยาว >= 6 ตัว เพราะชื่อสั้น (line, true, visa, grab)
+            # มีคำอังกฤษทั่วไปที่ห่างแค่ 1 ตัวอักษรเยอะมาก จะทำให้เว็บจริงติดผิด
+            token_hit = False
+            if len(label) >= 6 and ("-" in main_label or "_" in main_label):
+                for tok in re.split(r"[-_]+", normalize_glyphs(main_label)):
+                    if len(tok) >= 5 and levenshtein(tok, label) <= 1:
+                        token_hit = True
+                        break
+
+            # หมายเหตุ: เคยลองเพิ่มกฎ "ชื่อแบรนด์ฝังอยู่ต้นชื่อโดเมนแล้วมีตัวอักษร
+            # ต่อท้าย" เพื่อจับ bankofamericaijcf.com แต่ทดสอบกับโดเมนยอดนิยม 3,000
+            # อันดับแรกแล้วพบว่าทำให้เว็บจริงของแบรนด์เองโดนเตือนผิด 25 โดเมน
+            # (samsungcloud.com, discordapp.com, dropboxapi.com, spotifycdn.com ฯลฯ
+            # ล้วนเป็นโดเมนของบริษัทนั้นจริง) และไม่มีเงื่อนไขใดแยก "ijcf" ออกจาก
+            # "apps" ได้อย่างน่าเชื่อถือ จึงตัดกฎนี้ทิ้ง ยอมพลาดลิงก์หลอกแบบนี้ไป
+            # ดีกว่าทำให้ผู้ใช้เลิกเชื่อคำเตือนของระบบ
+
+            if glyph_same or close or hidden or token_hit:
                 sig = _signal(
                     "typosquatting",
                     f"ชื่อโดเมนเลียนแบบ/สะกดใกล้เคียง {label.upper()}",
@@ -236,10 +336,12 @@ def analyze(parsed: dict) -> dict:
             "อาจใช้ตัวอักษรต่างภาษาที่หน้าตาเหมือนภาษาอังกฤษเพื่อปลอมเป็นเว็บจริง"))
 
     # 6) นามสกุลที่มิจฉาชีพนิยม
-    tld = parsed.get("tld", "")
-    if tld and tld in RISKY_TLDS:
+    # เทียบเฉพาะส่วนท้ายสุด เพราะตอนนี้ tld อาจเป็นสองชั้น (com.ml, co.ve)
+    # ถ้าเทียบทั้งก้อนจะพลาด roblox.com.ml ที่ความจริงอยู่บนนามสกุล .ml
+    tld_last = tld.rsplit(".", 1)[-1]
+    if tld_last and tld_last in RISKY_TLDS:
         signals.append(_signal(
-            "risky_tld", f"ใช้นามสกุลที่มิจฉาชีพนิยม (.{tld})",
+            "risky_tld", f"ใช้นามสกุลที่มิจฉาชีพนิยม (.{tld_last})",
             "นามสกุลนี้จดง่ายและราคาถูก จึงพบในเว็บหลอกบ่อย"))
 
     # 7) subdomain ลึกผิดปกติ
@@ -320,4 +422,5 @@ def analyze(parsed: dict) -> dict:
 
     score = sum(s["points"] for s in signals)
     return {"score": score, "signals": signals,
+            "trust": collect_trust(parsed),
             "verified_safe": False, "legit_brand": None}

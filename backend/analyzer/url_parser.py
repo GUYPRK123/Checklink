@@ -12,7 +12,7 @@ import re
 import unicodedata
 from urllib.parse import urlsplit
 
-from .config import BRANDS, MULTI_SUFFIXES
+from .config import BRANDS, MULTI_SUFFIXES, GENERIC_SECOND_LEVELS
 
 _IPV4 = re.compile(r"^\d{1,3}(\.\d{1,3}){3}$")
 _HAS_SCHEME = re.compile(r"^[a-zA-Z][a-zA-Z0-9+.\-]*://")
@@ -158,8 +158,18 @@ def parse_url(raw: str) -> dict:
 
     labels = host.split(".")
     suffix_len = 1
-    if len(labels) >= 3 and ".".join(labels[-2:]) in MULTI_SUFFIXES:
-        suffix_len = 2
+    if len(labels) >= 3:
+        last2 = ".".join(labels[-2:])
+        # นามสกุลสองชั้นที่ระบุไว้ตรง ๆ (เช่น co.th, com.au)
+        if last2 in MULTI_SUFFIXES:
+            suffix_len = 2
+        # กฎทั่วไป: <คำบอกประเภท>.<รหัสประเทศ 2 ตัว> เช่น co.ve, com.pg, org.za
+        # หลายประเทศใช้รูปแบบนี้ ถ้าไล่ใส่ทีละรายการจะไม่มีวันครบ และเมื่อระบบตัด
+        # ผิด ชื่อแบรนด์จะไปตกอยู่ในโดเมนย่อยแล้วถูกอ่านว่าเป็นการปลอมแบรนด์
+        # (google.co.ve เคยขึ้นแดงเพราะเหตุนี้)
+        elif (len(labels[-1]) == 2 and labels[-1].isalpha()
+              and labels[-2] in GENERIC_SECOND_LEVELS):
+            suffix_len = 2
     reg_len = suffix_len + 1  # โดเมนจริง = ชื่อ + นามสกุล
 
     result.update({
