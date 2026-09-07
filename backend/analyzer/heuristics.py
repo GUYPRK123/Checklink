@@ -10,7 +10,7 @@ import re
 from urllib.parse import unquote
 
 from . import popularity
-from .config import (BRANDS, RISKY_TLDS, SHORTENERS, LURE_KEYWORDS, WEIGHTS,
+from .config import (BRANDS, RISKY_TLDS, SIMILARITY_EXCEPTIONS, SHORTENERS, LURE_KEYWORDS, WEIGHTS,
                      EXECUTABLE_EXTENSIONS, USER_CONTENT_DOMAINS,
                      PUBLISHING_DOMAINS, RESTRICTED_TLDS, VERIFIED_ORG_TLDS,
                      POPULARITY_TIERS,
@@ -141,6 +141,7 @@ def analyze(parsed: dict) -> dict:
     # 0) ตรงกับโดเมนจริงของแบรนด์เป๊ะ -> ปลอดภัย (ลัดออก)
     #    ยกเว้นโดเมนประเภทให้คนอื่นมาฝากเว็บ (github.io ฯลฯ) ที่ต้องตรวจต่อเสมอ
     #    เพราะสิ่งที่เชื่อได้คือ "ตัวบริษัทเจ้าของโดเมน" ไม่ใช่ "เนื้อหาที่คนอื่นเอามาฝาก"
+    tld = parsed.get("tld", "")
     is_user_content = reg in USER_CONTENT_DOMAINS
     # แพลตฟอร์มเผยแพร่บทความ (medium/substack/...) — path คือชื่อบทความ ไม่ใช่โครงเว็บ
     # ที่คนทำหน้าปลอมออกแบบเอง จึงใช้กฎเรื่องแบรนด์ต่างจากพื้นที่ฝากเว็บทั่วไป
@@ -148,7 +149,11 @@ def analyze(parsed: dict) -> dict:
     brand_hit_on_host = False   # เจอชื่อแบรนด์บนพื้นที่ฝากฟรีไปแล้ว (กันนับซ้ำ)
     if not is_user_content:
         for b in BRANDS:
-            if reg in b["domains"]:
+            # นามสกุลโดเมนที่เป็นชื่อแบรนด์เอง (.google .microsoft .apple .amazon)
+            # เป็นนามสกุลที่บริษัทนั้นซื้อไว้ทั้งอัน คนนอกจดไม่ได้ ทุกอย่างที่ลงท้าย
+            # ด้วยนามสกุลนี้จึงเป็นของบริษัทนั้นแน่นอน เช่น gemini.google, edge.apple
+            # ถ้าไม่มีกฎนี้ ระบบจะอ่านว่า "มีชื่อแบรนด์แต่ไม่ตรงโดเมนทางการ" แล้วขึ้นแดง
+            if tld == b["label"] or reg in b["domains"]:
                 signals.append({
                     "id": "verified_brand",
                     "title": f"ตรงกับโดเมนทางการของ {b['label'].upper()}",
@@ -260,7 +265,8 @@ def analyze(parsed: dict) -> dict:
             break
 
     # 2) สะกดใกล้เคียงแบรนด์ (typosquatting / ตัวอักษรปลอม / ซ่อนแบรนด์ด้วยเลข)
-    if not parsed.get("is_ip"):
+    #    ข้ามโดเมนขององค์กรจริงที่บังเอิญสะกดใกล้แบรนด์ (ดู SIMILARITY_EXCEPTIONS)
+    if not parsed.get("is_ip") and reg not in SIMILARITY_EXCEPTIONS:
         norm_label = normalize_glyphs(main_label)
         norm_host = normalize_glyphs(host)
         for b in BRANDS:
@@ -281,7 +287,27 @@ def analyze(parsed: dict) -> dict:
             # แต่ไม่โผล่ในโฮสต์ตัวจริง (เช่น g00gle-account, micros0ft-login)
             pat = r"(^|[^a-z])" + re.escape(label) + r"([^a-z]|$)"
             hidden = bool(re.search(pat, norm_host)) and not re.search(pat, host)
-            if glyph_same or close or hidden:
+            # แบรนด์ถูกซ่อนไว้หลังขีดหรือจุด เช่น whtsapp-serve.chat, secure-paypa1.com
+            # เดิมเทียบทั้งก้อน "whtsapp-serve" กับ "whatsapp" ซึ่งห่างกันเกินเกณฑ์เสมอ
+            # จึงตัดชื่อโดเมนตามขีด/ขีดล่าง แล้วเทียบทีละชิ้น
+            # จำกัดเฉพาะแบรนด์ยาว >= 6 ตัว เพราะชื่อสั้น (line, true, visa, grab)
+            # มีคำอังกฤษทั่วไปที่ห่างแค่ 1 ตัวอักษรเยอะมาก จะทำให้เว็บจริงติดผิด
+            token_hit = False
+            if len(label) >= 6 and ("-" in main_label or "_" in main_label):
+                for tok in re.split(r"[-_]+", normalize_glyphs(main_label)):
+                    if len(tok) >= 5 and levenshtein(tok, label) <= 1:
+                        token_hit = True
+                        break
+
+            # หมายเหตุ: เคยลองเพิ่มกฎ "ชื่อแบรนด์ฝังอยู่ต้นชื่อโดเมนแล้วมีตัวอักษร
+            # ต่อท้าย" เพื่อจับ bankofamericaijcf.com แต่ทดสอบกับโดเมนยอดนิยม 3,000
+            # อันดับแรกแล้วพบว่าทำให้เว็บจริงของแบรนด์เองโดนเตือนผิด 25 โดเมน
+            # (samsungcloud.com, discordapp.com, dropboxapi.com, spotifycdn.com ฯลฯ
+            # ล้วนเป็นโดเมนของบริษัทนั้นจริง) และไม่มีเงื่อนไขใดแยก "ijcf" ออกจาก
+            # "apps" ได้อย่างน่าเชื่อถือ จึงตัดกฎนี้ทิ้ง ยอมพลาดลิงก์หลอกแบบนี้ไป
+            # ดีกว่าทำให้ผู้ใช้เลิกเชื่อคำเตือนของระบบ
+
+            if glyph_same or close or hidden or token_hit:
                 sig = _signal(
                     "typosquatting",
                     f"ชื่อโดเมนเลียนแบบ/สะกดใกล้เคียง {label.upper()}",
@@ -310,10 +336,12 @@ def analyze(parsed: dict) -> dict:
             "อาจใช้ตัวอักษรต่างภาษาที่หน้าตาเหมือนภาษาอังกฤษเพื่อปลอมเป็นเว็บจริง"))
 
     # 6) นามสกุลที่มิจฉาชีพนิยม
-    tld = parsed.get("tld", "")
-    if tld and tld in RISKY_TLDS:
+    # เทียบเฉพาะส่วนท้ายสุด เพราะตอนนี้ tld อาจเป็นสองชั้น (com.ml, co.ve)
+    # ถ้าเทียบทั้งก้อนจะพลาด roblox.com.ml ที่ความจริงอยู่บนนามสกุล .ml
+    tld_last = tld.rsplit(".", 1)[-1]
+    if tld_last and tld_last in RISKY_TLDS:
         signals.append(_signal(
-            "risky_tld", f"ใช้นามสกุลที่มิจฉาชีพนิยม (.{tld})",
+            "risky_tld", f"ใช้นามสกุลที่มิจฉาชีพนิยม (.{tld_last})",
             "นามสกุลนี้จดง่ายและราคาถูก จึงพบในเว็บหลอกบ่อย"))
 
     # 7) subdomain ลึกผิดปกติ
