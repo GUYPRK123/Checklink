@@ -145,3 +145,101 @@ class TestLooksLikeUrl:
         """ถ้าหลุดไปเข้าระบบตรวจลิงก์ ผู้ใช้จะไม่ได้เห็นข้อมูลผู้รับเงินเลย"""
         assert looks_like_url(PROMPTPAY_OK) is False
         assert classify(PROMPTPAY_OK)["type"] == "promptpay"
+
+
+def _ปิดท้ายด้วยCRC(body: str) -> str:
+    """ต่อเลขตรวจสอบให้ถูกต้องท้าย payload (body ต้องจบด้วย "6304" แล้ว)"""
+    return body + f"{crc16_ccitt(body.encode('utf-8')):04X}"
+
+
+# QR พร้อมเพย์ที่มีชื่อผู้รับเงิน (tag 59) ไว้ทดสอบเรื่องชื่อโดยเฉพาะ
+_ฐานมีชื่อ = ("00020101021129370016A00000067701011101130066812345678"
+              "53037645802TH")
+
+
+class TestเลขตรวจสอบCRC:
+    def test_ไม่มีเลขตรวจสอบท้ายQRต้องเตือน(self):
+        """QR ชำระเงินจริงมี CRC ทุกใบ ถ้าไม่มีแปลว่ายืนยันไม่ได้ว่าถูกแก้มาหรือไม่
+        ต้องเป็น "ควรระวัง" ไม่ใช่เงียบไปเฉย ๆ"""
+        r = classify(_ฐานมีชื่อ)
+        assert r["crc_ok"] is None
+        assert any(w["severity"] == "high" and "CRC" in w["title"] for w in r["warnings"])
+
+    def test_มีข้อมูลต่อท้ายเลขตรวจสอบต้องไม่นับว่าผ่าน(self):
+        """tag 63 ต้องเป็นชุดสุดท้ายเสมอ การมีอะไรต่อท้ายอีกคือรูปแบบที่ QR จริงไม่มี
+        (ของเดิมใช้ rfind จึงยังตอบว่า CRC ตรงได้ทั้งที่ payload ผิดรูป)"""
+        r = classify(PROMPTPAY_OK + "0208EXTRA123")
+        assert r["crc_ok"] is not True
+        assert any("CRC" in w["title"] for w in r["warnings"])
+
+    def test_QRปกติต้องไม่ขึ้นคำเตือนเรื่องCRC(self):
+        r = classify(PROMPTPAY_OK)
+        assert not any("CRC" in w["title"] for w in r["warnings"])
+
+
+class Testชื่อผู้รับเงิน:
+    def test_ชื่อที่มีอักขระมองไม่เห็นต้องเตือน(self):
+        """แทรกอักขระความกว้างศูนย์ในชื่อร้าน = ชื่อที่ตาเห็นไม่ตรงกับชื่อจริง
+        ทำได้โดย CRC ยังตรงทุกประการ จึงต้องมีกฎแยกมาจับ"""
+        r = classify(_ปิดท้ายด้วยCRC(_ฐานมีชื่อ + "5907SH​OP" + "6304"))
+        assert r["crc_ok"] is True
+        assert any("อักขระที่มองไม่เห็น" in w["title"] for w in r["warnings"])
+
+    def test_ชื่อร้านปกติต้องไม่โดนเตือน(self):
+        """ด้านกลับ: ชื่อภาษาไทยธรรมดาต้องไม่ถูกตีว่าอำพราง"""
+        r = classify(_ปิดท้ายด้วยCRC(_ฐานมีชื่อ + "5927ร้านลุงมี" + "6304"))
+        assert not any("อักขระที่มองไม่เห็น" in w["title"] for w in r["warnings"])
+
+
+class Testจำนวนเงิน:
+    def test_สกุลเงินอื่นต้องไม่เขียนว่าบาท(self):
+        r = classify(_ปิดท้ายด้วยCRC(
+            "00020101021229370016A0000006770101110113006681234567853038405802TH54071000.006304"))
+        เงิน = [d for d in r["details"] if "จำนวนเงิน" in d["label"]][0]
+        assert "บาท" not in เงิน["value"] and "840" in เงิน["value"]
+
+    def test_สกุลเงินบาทยังเขียนว่าบาทเหมือนเดิม(self):
+        r = classify(_ปิดท้ายด้วยCRC(
+            "00020101021229370016A0000006770101110113006681234567853037645802TH54071000.006304"))
+        เงิน = [d for d in r["details"] if "จำนวนเงิน" in d["label"]][0]
+        assert เงิน["value"] == "1000.00 บาท"
+
+
+class TestQRเปิดแอปและคริปโต:
+    def test_ลิงก์เพิ่มเพื่อนLINE(self):
+        r = classify("line://ti/p/~scammer01")
+        assert r["type"] == "line"
+        assert any(w["severity"] == "medium" for w in r["warnings"])
+
+    def test_ลิงก์ติดตั้งแอปต้องเตือนแรงกว่า(self):
+        """แอปดูดเงินมากับ QR ที่พาไปหน้าติดตั้งโดยตรง"""
+        r = classify("market://details?id=com.example.fake")
+        assert r["type"] == "app_link"
+        assert any(w["severity"] == "high" for w in r["warnings"])
+
+    def test_QRโอนคริปโต(self):
+        r = classify("bitcoin:bc1qexampleaddress?amount=0.05")
+        assert r["type"] == "crypto"
+        assert any(w["severity"] == "high" for w in r["warnings"])
+
+    def test_ลิงก์เว็บของLINEยังเป็นลิงก์ตามเดิม(self):
+        """ด้านกลับ: https://line.me/... ต้องเข้าท่อตรวจลิงก์ 4 ชั้น ไม่ใช่ถูกดักเป็น app_link"""
+        assert classify("https://line.me/ti/p/~shop")["type"] == "url"
+
+    def test_ข้อความธรรมดาที่มีเครื่องหมายทวิภาคยังเป็นข้อความ(self):
+        """ด้านกลับ: อย่าให้กฎ scheme ไปกินข้อความทั่วไปที่มี ":" อยู่ข้างใน"""
+        assert classify("ราคา: 100 บาท")["type"] == "text"
+        assert classify("Note:ประชุมพรุ่งนี้")["type"] == "text"
+
+
+class TestQRที่มีภาษาไทยข้างใน:
+    def test_ชื่อร้านภาษาไทยแล้วCRCต้องยังตรง(self):
+        """ความยาวใน EMVCo นับเป็นไบต์ และ CRC คิดจากไบต์ ถ้าคิดผิดจะกลายเป็นว่า
+        QR ของร้านจริงที่ตั้งชื่อเป็นภาษาไทยถูกตัดสินว่า "ถูกแก้ไข" ซึ่งคือการโกหกผู้ใช้"""
+        r = classify(_ปิดท้ายด้วยCRC(_ฐานมีชื่อ + "5927ร้านลุงมี" + "6304"))
+        assert r["crc_ok"] is True
+        assert "critical" not in {w["severity"] for w in r["warnings"]}
+
+    def test_ชุดข้อมูลหลังข้อความไทยต้องยังอ่านได้(self):
+        """ถ้านับความยาวเป็นตัวอักษร ชุดที่อยู่ถัดจากชื่อไทยจะเลื่อนและอ่านไม่ออกทั้งหมด"""
+        assert parse_tlv("5927ร้านลุงมี6002TH") == {"59": "ร้านลุงมี", "60": "TH"}

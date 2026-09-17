@@ -15,6 +15,7 @@ SameSite=Lax cookie + rate limit อยู่แล้ว
 """
 import csv
 import io
+import re
 from concurrent.futures import ThreadPoolExecutor
 
 from flask import Blueprint, request, jsonify, current_app, Response
@@ -28,6 +29,13 @@ from analyzer import scan, scan_cache
 from analyzer.qr_payload import classify as classify_qr
 
 check_bp = Blueprint("check", __name__, url_prefix="/api")
+
+# ---- เพดานขนาดของสิ่งที่รับเข้ามา ----
+# ด่านเดียวที่มีอยู่ก่อนหน้านี้คือ client_max_body_size 2m ของ nginx ซึ่งใหญ่กว่าที่งานนี้
+# ต้องใช้หลายพันเท่า ทุกอย่างที่เล็ดลอดเข้ามาจะถูกยิงผ่าน regex ของ url_parser/heuristics
+# ทุกตัว แล้วถูกเขียนลงคอลัมน์ url ของ ScanHistory ทั้งก้อน
+MAX_URL_CHARS = 2048          # เท่ากับเพดานของ sandbox_server.py เพื่อไม่ให้สองฝั่งรับไม่เท่ากัน
+MAX_QR_PAYLOAD_CHARS = 4096   # QR หนึ่งอันเก็บข้อมูลได้สูงสุดราว 2,953 ไบต์ ยาวกว่านี้ = ไม่ได้มาจาก QR จริง
 
 
 def _resolve_api_key_user():
@@ -106,12 +114,18 @@ def _save_history(user, result: dict, ran_deep: bool,
     db.session.commit()
 
 
+# ยอมรับเฉพาะรูปแรสเตอร์แบบ base64 สามชนิดนี้เท่านั้น (หน้าเว็บส่ง image/jpeg มา ดู
+# makeThumb ใน qrDecode.js) การเช็กแค่ "ขึ้นต้นด้วย data:image/" เปิดช่องให้ยัด
+# data:image/svg+xml ที่มีสคริปต์อยู่ข้างในลงประวัติได้ ซึ่งไม่มีเหตุผลที่จะยอมรับ
+_THUMB_RE = re.compile(r"^data:image/(?:png|jpeg|webp);base64,[A-Za-z0-9+/]+={0,2}$")
+
+
 def _clean_thumb(raw) -> str:
     """รับภาพย่อของ QR จากเบราว์เซอร์ — ยอมรับเฉพาะ data URI ของรูปที่ขนาดไม่เกินที่กำหนด
     (ฝั่งหน้าเว็บย่อให้เล็กมาก่อนส่งแล้ว ตัวนี้เป็นด่านกันฝั่งเซิร์ฟเวอร์อีกชั้น)"""
-    if not isinstance(raw, str) or not raw.startswith("data:image/"):
+    if not isinstance(raw, str) or len(raw) > ScanHistory.MAX_THUMB_CHARS:
         return None
-    return raw if len(raw) <= ScanHistory.MAX_THUMB_CHARS else None
+    return raw if _THUMB_RE.match(raw) else None
 
 
 def _seen_before(user, identifier: str):
@@ -140,6 +154,9 @@ def api_check():
     url = (data.get("url") or "").strip()
     if not url:
         return jsonify({"ok": False, "error": "กรุณาส่งลิงก์ที่ต้องการตรวจ"}), 400
+    if len(url) > MAX_URL_CHARS:
+        return jsonify({"ok": False,
+                        "error": f"ลิงก์ยาวเกิน {MAX_URL_CHARS} ตัวอักษร ตรวจให้ไม่ได้"}), 400
 
     user, via_api_key = _current_actor()
     if user is None:
@@ -235,6 +252,10 @@ def api_check_qr():
     payload = (data.get("payload") or "").strip()
     if not payload:
         return jsonify({"ok": False, "error": "ไม่พบเนื้อหาใน QR ที่ส่งมา"}), 400
+    if len(payload) > MAX_QR_PAYLOAD_CHARS:
+        return jsonify({"ok": False,
+                        "error": f"เนื้อหาที่ส่งมายาวเกิน {MAX_QR_PAYLOAD_CHARS} ตัวอักษร "
+                                 "ซึ่งเกินกว่าที่ QR หนึ่งอันจะเก็บได้จริง"}), 400
 
     user, _ = _current_actor()
     if user is None:
@@ -290,7 +311,7 @@ def api_check_qr_bulk():
         if not isinstance(item, dict):
             continue
         payload = (item.get("payload") or "").strip()
-        if not payload:
+        if not payload or len(payload) > MAX_QR_PAYLOAD_CHARS:
             continue
         prepared.append({"name": str(item.get("name") or "")[:120], "payload": payload,
                          "thumb": _clean_thumb(item.get("thumb"))})
@@ -330,7 +351,8 @@ def api_check_bulk():
         return err
 
     data = request.get_json(silent=True) or {}
-    urls = [u.strip() for u in (data.get("urls") or []) if isinstance(u, str) and u.strip()]
+    urls = [u.strip() for u in (data.get("urls") or [])
+            if isinstance(u, str) and u.strip() and len(u.strip()) <= MAX_URL_CHARS]
     max_urls = current_app.config["BULK_CHECK_MAX_URLS"]
     if not urls:
         return jsonify({"ok": False, "error": "กรุณาส่งรายการลิงก์อย่างน้อย 1 ลิงก์"}), 400

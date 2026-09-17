@@ -16,6 +16,8 @@ TLV (Tag-Length-Value) และมี checksum CRC-16 อยู่ท้าย�
 """
 import re
 
+from .text_norm import strip_invisible
+
 # AID (Application Identifier) ของพร้อมเพย์ตามที่ธนาคารแห่งประเทศไทยกำหนด
 _PROMPTPAY_AIDS = {
     "A000000677010111": "พร้อมเพย์ (โอนเงินระหว่างบุคคล)",
@@ -35,6 +37,9 @@ _TYPE_INFO = {
     "email": ("อีเมล", "เปิดแอปอีเมลพร้อมผู้รับและเนื้อหาที่เตรียมไว้"),
     "vcard": ("นามบัตร (รายชื่อผู้ติดต่อ)", "เสนอให้บันทึกรายชื่อผู้ติดต่อลงเครื่อง"),
     "geo": ("พิกัดแผนที่", "เปิดแอปแผนที่ไปยังพิกัดที่ระบุ"),
+    "crypto": ("QR โอนเงินคริปโต", "เปิดแอปกระเป๋าคริปโตพร้อมที่อยู่ปลายทางที่ระบุใน QR"),
+    "line": ("ลิงก์เปิดแอป LINE", "เปิดแอป LINE เพื่อเพิ่มเพื่อนหรือเปิดแชทตามที่ระบุใน QR"),
+    "app_link": ("ลิงก์เปิดแอปในเครื่อง", "เปิดแอปในเครื่องโดยตรง ไม่ผ่านหน้าเว็บ"),
     "text": ("ข้อความธรรมดา", "แสดงข้อความเฉย ๆ ไม่เปิดแอปอื่น"),
 }
 
@@ -53,17 +58,24 @@ def crc16_ccitt(data: bytes) -> int:
 # ---------------------------------------------------------------- TLV
 def parse_tlv(payload: str) -> dict:
     """แตกข้อมูลรูปแบบ TLV ของ EMVCo: ต่อกันเป็นชุด ๆ ละ [tag 2 ตัว][ความยาว 2 ตัว][ค่า]
-    คืน dict {tag: value} — ถ้ารูปแบบพังกลางทางจะคืนเท่าที่อ่านได้ (ไม่ throw)"""
-    out, i, n = {}, 0, len(payload)
+    คืน dict {tag: value} — ถ้ารูปแบบพังกลางทางจะคืนเท่าที่อ่านได้ (ไม่ throw)
+
+    **ความยาวใน EMVCo นับเป็นไบต์ ไม่ใช่จำนวนตัวอักษร** จึงต้องเดินบนไบต์
+    ไม่งั้น QR ที่มีชื่อร้านภาษาไทย (ไทย 1 ตัว = 3 ไบต์ใน UTF-8) จะทำให้ตำแหน่ง
+    เลื่อนทั้งหมดตั้งแต่ชุดนั้นเป็นต้นไป แล้วอ่านชุดหลังจากนั้นผิดทุกชุด
+    """
+    data = payload.encode("utf-8")
+    out, i, n = {}, 0, len(data)
     while i + 4 <= n:
-        tag, length_raw = payload[i:i + 2], payload[i + 2:i + 4]
+        tag = data[i:i + 2].decode("ascii", "ignore")
+        length_raw = data[i + 2:i + 4].decode("ascii", "ignore")
         if not tag.isdigit() or not length_raw.isdigit():
             break
         length = int(length_raw)
-        value = payload[i + 4:i + 4 + length]
+        value = data[i + 4:i + 4 + length]
         if len(value) < length:
             break  # ความยาวบอกไว้เกินกว่าข้อมูลที่มีจริง -> ข้อมูลไม่ครบ
-        out[tag] = value
+        out[tag] = value.decode("utf-8", "ignore")
         i += 4 + length
     return out
 
@@ -95,11 +107,24 @@ def _analyze_emv(payload: str) -> dict:
     warnings, facts = [], []
 
     # ---- ตรวจ CRC: จุดแข็งของ QR ชำระเงิน คือแก้ข้อมูลแล้ว checksum จะไม่ตรงทันที ----
+    # tag 63 ต้องเป็นชุดสุดท้ายของ payload เสมอตามมาตรฐาน จึงอ่านจากท้ายแบบตายตัว
+    # (เดิมใช้ rfind("6304") ซึ่งพลาดได้เมื่อค่า CRC เองบังเอิญเป็น "6304" หรือมีข้อมูล
+    #  ต่อท้าย CRC ซึ่งเป็นรูปแบบที่ QR จริงไม่มี)
     crc_ok = None
-    idx = payload.rfind("6304")
-    if idx != -1 and len(payload) >= idx + 8:
-        expected = crc16_ccitt(payload[:idx + 4].encode("ascii", "ignore"))
-        crc_ok = f"{expected:04X}" == payload[idx + 4:idx + 8].upper()
+    if len(payload) >= 8 and payload[-8:-4] == "6304":
+        # CRC คิดจาก "ไบต์" ของ payload ตามที่เครื่องออก QR คิด — ของเดิมใช้
+        # encode("ascii", "ignore") ซึ่งทิ้งตัวอักษรไทยออกไปเงียบ ๆ ทำให้ QR จริงที่มี
+        # ชื่อร้านภาษาไทยถูกตัดสินว่า "ถูกแก้ไข" ทั้งที่ไม่ได้ถูกแก้
+        expected = crc16_ccitt(payload[:-4].encode("utf-8"))
+        crc_ok = f"{expected:04X}" == payload[-4:].upper()
+    if crc_ok is None:
+        # ไม่มีเลขตรวจสอบให้ยันเลย = ตรวจไม่ได้ ไม่ใช่ปลอดภัย (QR ธนาคารจริงมีทุกใบ)
+        warnings.append({
+            "severity": "high",
+            "title": "ไม่พบเลขตรวจสอบความถูกต้อง (CRC) ท้าย QR",
+            "detail": "QR ชำระเงินตามมาตรฐานต้องปิดท้ายด้วยเลขตรวจสอบเสมอ การที่ไม่มีแปลว่า "
+                      "ยืนยันไม่ได้ว่าข้อมูลใน QR ถูกแก้ไขมาหรือไม่ ให้ตรวจชื่อผู้รับเงินในแอปธนาคารก่อนกดยืนยันทุกครั้ง",
+        })
     if crc_ok is False:
         warnings.append({
             "severity": "critical",
@@ -109,6 +134,18 @@ def _analyze_emv(payload: str) -> dict:
         })
     elif crc_ok:
         facts.append({"label": "เลขตรวจสอบความถูกต้อง (CRC)", "value": "ตรงกัน — ข้อมูลใน QR ไม่ถูกแก้ไข", "state": "ok"})
+
+    # ---- ชื่อผู้รับเงิน (tag 59) ที่แอบใส่อักขระมองไม่เห็น ----
+    # ชื่อผู้รับคือสิ่งเดียวที่ผู้ใช้เอาไว้ยืนยันก่อนกดโอน การแทรกอักขระความกว้างศูนย์หรือ
+    # ตัวคุมทิศทางทำให้ชื่อที่ "ตาเห็น" ต่างจากชื่อจริงได้ ทั้งที่ CRC ยังตรงทุกประการ
+    merchant_name = root.get("59", "")
+    if merchant_name and strip_invisible(merchant_name) != merchant_name:
+        warnings.append({
+            "severity": "high",
+            "title": "ชื่อผู้รับเงินใน QR มีอักขระที่มองไม่เห็นแทรกอยู่",
+            "detail": "ชื่อร้านที่ปรากฏอาจไม่ตรงกับชื่อจริงที่ระบบอ่านได้ ซึ่งไม่มีเหตุผลที่ QR ของร้านค้าจริงจะทำแบบนี้ "
+                      "ให้ดูชื่อผู้รับเงินบนหน้าจอแอปธนาคารเป็นหลัก",
+        })
 
     # ---- หา Merchant Account Information (tag 26-51) เพื่อดูว่าเป็นพร้อมเพย์ไหม ----
     aid, mai, qr_type = "", {}, "emv_unknown"
@@ -172,7 +209,9 @@ def _analyze_emv(payload: str) -> dict:
     if target["masked"]:
         details.append({"label": target["kind"], "value": target["masked"], "state": ""})
     if amount:
-        details.append({"label": "จำนวนเงินที่ระบุใน QR", "value": f"{amount} บาท", "state": "warn"})
+        # สกุลเงินมาจากใน QR ไม่ใช่ค่าคงที่ ถ้าไม่ใช่ 764 การเขียนว่า "บาท" คือบอกผิด
+        unit = "บาท" if currency in ("", "764") else f"(สกุลเงินรหัส {currency})"
+        details.append({"label": "จำนวนเงินที่ระบุใน QR", "value": f"{amount} {unit}", "state": "warn"})
     else:
         details.append({"label": "จำนวนเงินที่ระบุใน QR", "value": "ไม่ได้ระบุ (ผู้โอนกรอกเอง)", "state": ""})
     extra = parse_tlv(root.get("62", ""))
@@ -289,6 +328,90 @@ def _parse_geo(payload: str) -> dict:
     }
 
 
+# ---------------------------------------------------------------- เปิดแอป/คริปโต
+# QR สองกลุ่มนี้ไม่ใช่ลิงก์เว็บ ระบบตรวจลิงก์ 4 ชั้นจึงไม่แตะเลย และเดิมตกไปเป็น
+# "ข้อความธรรมดา" ที่ไม่มีคำเตือนอะไรเลย ทั้งที่เป็นท่าที่มิจฉาชีพไทยใช้จริงบ่อยมาก
+_CRYPTO_SCHEMES = {
+    "bitcoin": "บิตคอยน์ (BTC)",
+    "bitcoincash": "บิตคอยน์แคช (BCH)",
+    "ethereum": "อีเทอเรียม (ETH)",
+    "litecoin": "ไลต์คอยน์ (LTC)",
+    "dogecoin": "โดชคอยน์ (DOGE)",
+    "tron": "ทรอน (TRX)",
+    "ton": "โทนคอยน์ (TON)",
+    "solana": "โซลานา (SOL)",
+}
+
+_APP_SCHEMES = {
+    "line": "แอป LINE",
+    "intent": "แอปในเครื่อง (Android intent)",
+    "market": "หน้าติดตั้งแอปใน Google Play",
+    "itms-apps": "หน้าติดตั้งแอปใน App Store",
+    "tg": "แอป Telegram",
+    "whatsapp": "แอป WhatsApp",
+    "fb-messenger": "แอป Messenger",
+    "viber": "แอป Viber",
+    "weixin": "แอป WeChat",
+}
+
+_SCHEME_RE = re.compile(r"^([a-z][a-z0-9+.\-]*):", re.I)
+
+
+def scheme_of(text: str) -> str:
+    """คืนชื่อ scheme ตัวพิมพ์เล็กของข้อความ (เช่น "bitcoin") หรือ "" ถ้าไม่มี"""
+    m = _SCHEME_RE.match(text.strip())
+    return m.group(1).lower() if m else ""
+
+
+def _parse_crypto(payload: str, scheme: str) -> dict:
+    """QR โอนคริปโต — จุดที่ต้องเตือนคือโอนแล้วเรียกคืนไม่ได้เลย ต่างจากโอนผ่านธนาคาร"""
+    address = payload.split(":", 1)[1].split("?")[0].strip()
+    return {
+        "type": "crypto",
+        "facts": [
+            {"label": "สกุลเงินดิจิทัล", "value": _CRYPTO_SCHEMES[scheme], "state": ""},
+            {"label": "ที่อยู่กระเป๋าปลายทาง", "value": address[:80] or "(ไม่ระบุ)", "state": "warn"},
+        ],
+        "warnings": [{
+            "severity": "high",
+            "title": "QR นี้ให้โอนเงินคริปโตไปยังกระเป๋าที่กำหนดไว้",
+            "detail": "การโอนคริปโตยกเลิกไม่ได้และตามคืนแทบไม่ได้เลย กลโกงชวนลงทุนหรือหลอกให้จ่าย "
+                      "ค่าธรรมเนียมก่อนถอนเงินมักให้สแกน QR แบบนี้",
+        }],
+        "details": [],
+    }
+
+
+def _parse_app_link(payload: str, scheme: str) -> dict:
+    """QR ที่เปิดแอปในเครื่องโดยตรง (line://, intent://, market:// ฯลฯ)"""
+    target = _APP_SCHEMES[scheme]
+    facts = [{"label": "สิ่งที่จะถูกเปิด", "value": target, "state": ""},
+             {"label": "เนื้อหาในลิงก์", "value": payload[:200], "state": ""}]
+    if scheme == "line":
+        warning = {
+            "severity": "medium",
+            "title": "QR นี้พาไปเพิ่มเพื่อนหรือเปิดแชทในแอป LINE",
+            "detail": "การดึงคนออกจากช่องทางทางการไปคุยส่วนตัวคือขั้นแรกของกลโกงเกือบทุกแบบ "
+                      "บัญชีทางการของธนาคารและหน่วยงานรัฐจะมีโล่รับรองในแอป ถ้าไม่มีโล่ให้ถือว่าไม่ใช่บัญชีทางการ",
+        }
+    elif scheme in ("market", "itms-apps"):
+        warning = {
+            "severity": "high",
+            "title": "QR นี้พาไปหน้าติดตั้งแอป",
+            "detail": "การติดตั้งแอปตามลิงก์ที่ได้รับมาคือช่องทางหลักของแอปดูดเงิน "
+                      "ให้ค้นชื่อแอปในสโตร์ด้วยตัวเอง แล้วดูชื่อผู้พัฒนากับจำนวนผู้ใช้ก่อนติดตั้งเสมอ",
+        }
+    else:
+        warning = {
+            "severity": "medium",
+            "title": f"QR นี้เปิด{target} โดยตรง ไม่ใช่หน้าเว็บ",
+            "detail": "ลิงก์แบบเปิดแอปข้ามการเตือนของเบราว์เซอร์ไปทั้งหมด และตรวจปลายทางล่วงหน้าไม่ได้ "
+                      "ให้เปิดแอปนั้นเองแล้วค้นหาบัญชีปลายทางแทนการสแกนตาม",
+        }
+    return {"type": "line" if scheme == "line" else "app_link",
+            "facts": facts, "warnings": [warning], "details": []}
+
+
 # ---------------------------------------------------------------- ทางเข้าหลัก
 _URL_RE = re.compile(r"^[\w.-]+\.[a-z]{2,}([/?#]|$)", re.I)
 
@@ -333,6 +456,10 @@ def classify(payload: str) -> dict:
         result = _parse_vcard(text)
     elif upper.startswith("GEO:"):
         result = _parse_geo(text)
+    elif scheme_of(text) in _CRYPTO_SCHEMES:
+        result = _parse_crypto(text, scheme_of(text))
+    elif scheme_of(text) in _APP_SCHEMES:
+        result = _parse_app_link(text, scheme_of(text))
     else:
         result = {
             "type": "text",
