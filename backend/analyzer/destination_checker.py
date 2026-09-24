@@ -16,16 +16,20 @@ destination_checker.py
 พิมพ์เองไปยังปลายทางที่ผู้ใช้ (หรือมิจฉาชีพ) เป็นคนกำหนด:
   1) อนุญาตเฉพาะ scheme http/https เท่านั้น
   2) resolve DNS เองก่อนต่อทุกครั้ง แล้วเช็ก "ทุก" IP ที่ได้ว่าไม่ใช่ IP วง
-     private/loopback/link-local/reserved/multicast — เช็กใหม่ทุก hop เพื่อกัน
-     DNS rebinding (โดเมนสาธารณะที่ตอบ IP ภายในทีหลัง)
+     private/loopback/link-local/reserved/multicast — เช็กใหม่ทุก hop
+  2ก) **เช็กซ้ำที่ socket จริงหลังต่อติดด้วย getpeername()** (safe_http.py) เพราะข้อ 2
+     อย่างเดียวกัน DNS rebinding ไม่ได้: requests ไปถาม DNS ใหม่อีกรอบตอนต่อ ซึ่ง
+     เจ้าของโดเมนสลับคำตอบเป็น 127.0.0.1 ในจังหวะนั้นได้ ข้อ 2 กรองได้เร็วโดยไม่ต้อง
+     เปิด TCP เลย แต่ข้อ 2ก คือด่านที่ไม่มีช่องเวลาให้โกง
   3) จำกัดจำนวน hop สูงสุด (MAX_HOPS) และ timeout ต่อ hop
   4) ใช้ HEAD ก่อน (ไม่ดึง body) ถ้าเซิร์ฟเวอร์ไม่รองรับค่อย fallback เป็น GET
      แบบ stream แล้วปิดทันทีโดยไม่อ่านเนื้อหา
 """
-import ipaddress
 import re
 import socket
 from urllib.parse import urljoin, urlsplit
+
+from .safe_http import BlockedAddressError, is_blocked_ip, safe_session
 
 MAX_HOPS = 5
 # แยกเป็น (connect, read): ปลายทางที่ "ต่อไม่ได้เลย" ควรรู้ผลเร็ว (5 วิ)
@@ -60,16 +64,10 @@ def _final_response_facts(resp, final_url: str) -> dict:
     }
 
 
-def _is_blocked_ip(ip_str: str) -> bool:
-    """True ถ้าเป็น IP ที่ไม่ควรให้ backend ยิงเข้าไปหา (วง internal/สงวนไว้)"""
-    try:
-        ip = ipaddress.ip_address(ip_str)
-    except ValueError:
-        return True  # แปลงไม่ได้ -> กันไว้ก่อน
-    return (
-        ip.is_private or ip.is_loopback or ip.is_link_local
-        or ip.is_multicast or ip.is_reserved or ip.is_unspecified
-    )
+# ตัวตัดสินว่า IP ไหนห้ามต่อ ย้ายไปอยู่ safe_http.py แล้ว เพื่อให้ "ด่านก่อนต่อ" (ที่นี่)
+# กับ "ด่านหลังต่อติด" (getpeername) ใช้เกณฑ์เดียวกันแน่ ๆ ไม่มีทางหลุดเป็นสองชุด
+# ชื่อเดิมยังใช้ได้เพื่อไม่ให้ผู้เรียก/เทสต์เดิมพัง
+_is_blocked_ip = is_blocked_ip
 
 
 def _resolve_safe_ips(host: str):
@@ -131,16 +129,25 @@ def resolve_destination(raw_url: str) -> dict:
 
         headers = {"User-Agent": USER_AGENT}
         try:
-            resp = requests.head(current, timeout=TIMEOUT, allow_redirects=False,
-                                  headers=headers)
-        except requests.RequestException:
-            try:
-                resp = requests.get(current, timeout=TIMEOUT, allow_redirects=False,
-                                     headers=headers, stream=True)
-                resp.close()
-            except requests.RequestException as e2:
-                return {"resolved": hop > 0, "chain": chain, "final_url": current,
-                        "hops": len(chain) - 1, "error": f"{type(e2).__name__}: {e2}"}
+            # safe_session: ทุก connection ถูกเช็ก IP ปลายทางจริงหลังต่อติด (safe_http.py)
+            with safe_session() as session:
+                try:
+                    resp = session.head(current, timeout=TIMEOUT, allow_redirects=False,
+                                        headers=headers)
+                except requests.RequestException:
+                    # เซิร์ฟเวอร์ไม่รองรับ HEAD -> ลอง GET แบบ stream แล้วปิดทันทีโดยไม่อ่าน body
+                    resp = session.get(current, timeout=TIMEOUT, allow_redirects=False,
+                                       headers=headers, stream=True)
+                    resp.close()
+        except BlockedAddressError as e:
+            # DNS ตอบ IP สาธารณะตอนถูกตรวจ แต่ socket ไปโผล่ที่วงภายใน = DNS rebinding
+            # ซึ่งเป็นความพยายามโจมตีตรง ๆ ไม่ใช่ "เน็ตสะดุด" -> ต้องเป็น blocked เหมือน
+            # กรณีที่ DNS ตอบ IP ภายในมาแต่แรก เพื่อให้ scanner ให้คะแนนเป็นสัญญาณอันตราย
+            return {"resolved": False, "chain": chain, "final_url": current,
+                    "hops": len(chain) - 1, "blocked": True, "blocked_reason": str(e)}
+        except requests.RequestException as e2:
+            return {"resolved": hop > 0, "chain": chain, "final_url": current,
+                    "hops": len(chain) - 1, "error": f"{type(e2).__name__}: {e2}"}
 
         if resp.status_code in (301, 302, 303, 307, 308):
             location = resp.headers.get("Location")

@@ -153,6 +153,17 @@ rate limit เห็นผู้ใช้ทุกคนเป็น 127.0.0.1 �
    ด่านเดียวที่กันไม่ให้หน้าเว็บของผู้ใช้คนอื่นยืมอันดับความนิยมของแพลตฟอร์มไปได้เขียว
    ลบออกหรือลืมเพิ่ม = หน้าฟิชชิ่งบนแพลตฟอร์มนั้นได้เขียวทันที (มีเทสต์ล็อกไว้แล้วใน
    `tests/test_trust.py` แต่ล็อกได้เฉพาะรายชื่อที่รู้จักแล้ว)
+7. **ห้ามเปิดฐานข้อมูลในนาม root** — ฐานข้อมูลเปิดโหมด WAL ไว้ (`backend/app.py`) จึงมี
+   `app.db-wal` กับ `app.db-shm` เพิ่มมา และ SQLite สร้างสองไฟล์นั้นให้เอง "ในนามคนที่เปิด"
+   ถ้า root เปิดก่อน แอปที่รันเป็น `checkurl` จะเขียนฐานข้อมูลไม่ได้อีกเลย (เว็บยังขึ้นปกติ
+   แต่สมัครสมาชิก/บันทึกประวัติพังทั้งระบบ) — `deploy.sh` สำรองในนาม `checkurl` ให้แล้ว
+   และแก้เจ้าของไฟล์ให้อัตโนมัติถ้าเจอว่าเป็นของ root
+8. **กู้ฐานข้อมูลต้องลบ `app.db-wal`/`app.db-shm` ด้วย** — ไม่งั้นข้อมูลที่ค้างอยู่ใน WAL
+   จะถูกเล่นซ้ำทับไฟล์ที่กู้มา (ขั้นตอนเต็มอยู่ในบรรทัดสุดท้ายที่ `deploy.sh` พิมพ์ออกมา)
+9. **ยิง HTTP ออกนอกต้องผ่าน `analyzer/safe_http.py` เท่านั้น** — ห้ามเรียก
+   `requests.get()` / `socket.create_connection()` ตรง ๆ ในโค้ดที่ปลายทางมาจากผู้ใช้
+   เพราะการเช็ก IP ก่อนต่อ (`_resolve_safe_ips`) ถาม DNS คนละรอบกับตอนต่อจริง ซึ่งเปิดช่อง
+   DNS rebinding ไว้ `safe_http` ปิดช่องนั้นด้วยการเช็ก `getpeername()` หลัง socket ต่อติด
 
 ---
 
@@ -226,6 +237,8 @@ SESSION_COOKIE_SECURE=true   # ตั้งได้ "หลัง" มี HTTPS
 | `BULK_JOB_TTL` | - | `1800` |
 | `SCAN_CACHE_TTL` | - | `900` (0 = ปิดแคช) |
 | `SCAN_CACHE_MAX` | - | `2000` |
+| `DEEP_SCAN_CONCURRENCY` | - | `4` (ตรวจเชิงลึกพร้อมกันได้กี่ชุด, 0 = ไม่จำกัด) |
+| `DEEP_SCAN_WAIT_SEC` | - | `10` (รอคิวนานสุดก่อนถอยไปตอบผลชั้น 1-2) |
 | `WARMUP_URL` | - | `https://example.com` (ว่าง = ปิด) |
 | `SANDBOX_URL` | - | ว่าง = ไม่ใช้ sandbox (อ่าน HTML ดิบอย่างเดียว) |
 | `SANDBOX_TOKEN` / `SANDBOX_TIMEOUT` | - | — / `12` (วินาที) |
@@ -244,7 +257,7 @@ SESSION_COOKIE_SECURE=true   # ตั้งได้ "หลัง" มี HTTPS
 | `GET /api/check/bulk/<job_id>` | เจ้าของงาน | ถามความคืบหน้า/ผลของงาน bulk |
 | `GET /api/history` | สมาชิก | 50 รายการล่าสุด |
 | `GET /api/history/export` | พรีเมียม | CSV |
-| `GET /api/health` | ทุกคน | สถานะ + สถิติแคชและงาน bulk |
+| `GET /api/health` | ทุกคน | สถานะ + สถิติแคช, งาน bulk, โควตา anon และคิวตรวจเชิงลึก (`deep_scan`) |
 
 ทุก endpoint ข้างบนรับได้ทั้ง **cookie จากการล็อกอิน** และ **header `X-API-Key`** (พรีเมียม)
 
@@ -288,6 +301,8 @@ Checklink/
 │  ├─ jobs.py             # คิวงาน bulk เบื้องหลัง
 │  ├─ models.py           # ตารางฐานข้อมูล
 │  ├─ analyzer/           # หัวใจการวิเคราะห์ (cascade 4 ชั้น + ตัวถอด QR)
+│  │  ├─ safe_http.py    #   ประตูเดียวที่ยิง HTTP ออกนอกได้ (กัน SSRF + DNS rebinding)
+│  │  └─ deep_limit.py   #   เพดานจำนวนการตรวจเชิงลึกที่ทำพร้อมกัน
 │  ├─ tests/              # เทสต์ pure function (pytest)
 │  └─ requirements.txt
 ├─ frontend/              # vanilla JS + ES modules (ไม่มี build step)

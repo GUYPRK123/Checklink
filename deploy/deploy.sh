@@ -25,6 +25,18 @@ PY="$APP_DIR/.venv/bin/python"
 SERVICE=phishing-checker
 SITE=https://checkurl.studiodup.com
 BACKUP_DIR=/home/checkurl
+# ผู้ใช้ที่เป็นเจ้าของฐานข้อมูล (ต้องตรงกับ User= ใน deploy/phishing-checker.service)
+APP_USER=checkurl
+
+# รันคำสั่งในนาม APP_USER เมื่อสคริปต์ถูกเรียกด้วย sudo — เหตุผลอยู่ที่ "กับดักของ WAL"
+# ในขั้นที่ 4 ถ้าไม่ได้เป็น root อยู่ (เช่นตอน DRY_RUN=1 ที่รันในนามผู้ใช้เอง) ก็รันตรง ๆ
+as_app_user() {
+    if [ "$(id -u)" = "0" ]; then
+        runuser -u "$APP_USER" -- "$@"
+    else
+        "$@"
+    fi
+}
 
 step() { printf '\n\033[1m==> %s\033[0m\n' "$1"; }
 fail() { printf '\033[31m!! %s\033[0m\n' "$1" >&2; exit 1; }
@@ -49,12 +61,36 @@ else
 fi
 
 step "4/6 สำรองฐานข้อมูล"
+# ------------------------------------------------------------
+# กับดักของ WAL (ฐานข้อมูลเปิด journal_mode=WAL ไว้ ดูเหตุผลใน backend/app.py)
+#
+# โหมด WAL ทำให้ฐานข้อมูลไม่ใช่ไฟล์เดียวอีกต่อไป: มี app.db-wal กับ app.db-shm มาด้วย
+# และ SQLite "สร้างสองไฟล์นั้นให้เอง" ทันทีที่มีใครเปิดฐานข้อมูล ถ้าคนที่เปิดคือ root
+# (เช่น deploy ตัวนี้) สองไฟล์นั้นจะกลายเป็นของ root แล้วแอปที่รันเป็น checkurl จะเขียน
+# ฐานข้อมูลไม่ได้อีกเลย — อาการคือเว็บยังขึ้นปกติแต่สมัครสมาชิก/บันทึกประวัติพังทั้งระบบ
+# จึงต้องสำรองในนาม checkurl เสมอ ห้ามแก้กลับเป็นให้ root เปิดฐานข้อมูลตรง ๆ
+#
+# ตัวสำรองใช้ Online Backup API ของ SQLite ซึ่งรวมข้อมูลที่ยังค้างใน -wal มาให้ครบ
+# และปลอดภัยกับไฟล์ที่ service กำลังใช้อยู่ (ไม่ต้องหยุด service ก่อน)
+# ------------------------------------------------------------
+for WALFILE in "$APP_DIR/instance/app.db-wal" "$APP_DIR/instance/app.db-shm"; do
+    [ -e "$WALFILE" ] || continue
+    OWNER=$(stat -c %U "$WALFILE")
+    [ "$OWNER" = "$APP_USER" ] && continue
+    if [ "$(id -u)" = "0" ]; then
+        chown "$APP_USER:$APP_USER" "$WALFILE"
+        echo "   แก้เจ้าของ $(basename "$WALFILE") จาก $OWNER เป็น $APP_USER แล้ว"
+    else
+        fail "$(basename "$WALFILE") เป็นของ $OWNER ไม่ใช่ $APP_USER -> แอปเขียนฐานข้อมูลไม่ได้ (รันด้วย sudo เพื่อให้แก้ให้)"
+    fi
+done
+
 BACKUP="$BACKUP_DIR/app.db.backup-$(date +%Y%m%d-%H%M%S)"
-"$PY" - "$BACKUP" <<'PY'
+as_app_user "$PY" - "$BACKUP" <<'PY'
 import sqlite3, sys
 src = sqlite3.connect("instance/app.db")
 dst = sqlite3.connect(sys.argv[1])
-src.backup(dst)          # ปลอดภัยกับไฟล์ที่ service กำลังใช้อยู่ ไม่ต้องหยุดก่อน
+src.backup(dst)
 dst.close(); src.close()
 PY
 echo "   $BACKUP"
@@ -87,5 +123,9 @@ R2=$(systemctl show "$SERVICE" -p NRestarts --value)
 printf '\n\033[32m✓ deploy สำเร็จ\033[0m  %s ตอบ 200 และ service นิ่งดี\n' "$SITE"
 echo "  ถ้าพบปัญหาทีหลัง ย้อนกลับด้วย:"
 echo "    cd /home/checkurl/Checklink && git -c safe.directory=\$PWD reset --hard <commit เดิม>"
-echo "    cp $BACKUP $APP_DIR/instance/app.db   # เฉพาะกรณีข้อมูลเสียหาย"
-echo "    sudo systemctl restart $SERVICE"
+echo "  เฉพาะกรณีข้อมูลเสียหาย — ต้องหยุด service ก่อน และลบ WAL เก่าทิ้งด้วย ไม่งั้นข้อมูล"
+echo "  ที่ค้างอยู่ใน app.db-wal จะถูกเล่นซ้ำทับไฟล์ที่กู้มา:"
+echo "    sudo systemctl stop $SERVICE"
+echo "    sudo rm -f $APP_DIR/instance/app.db-wal $APP_DIR/instance/app.db-shm"
+echo "    sudo runuser -u $APP_USER -- cp $BACKUP $APP_DIR/instance/app.db"
+echo "    sudo systemctl start $SERVICE"

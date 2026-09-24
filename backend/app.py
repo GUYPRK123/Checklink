@@ -12,11 +12,14 @@ app.py
 API หลัก:  POST /api/check   body = {"url": "..."}   -> ผลการวิเคราะห์ (JSON)
 """
 import os
+import sqlite3
 import threading
 import time
 
 from flask import Flask, send_from_directory, jsonify, request
 from flask_cors import CORS
+from sqlalchemy import event
+from sqlalchemy.engine import Engine
 from werkzeug.middleware.proxy_fix import ProxyFix
 from dotenv import load_dotenv
 
@@ -30,6 +33,46 @@ from check import check_bp
 
 FRONTEND_DIR = os.path.abspath(
     os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "frontend"))
+
+
+# ---------------------------------------------------------------------------
+# ค่า PRAGMA ของ SQLite — ตั้งทุกครั้งที่เปิด connection ใหม่
+# ---------------------------------------------------------------------------
+# ปัญหาเดิม: SQLite โหมดมาตรฐาน (journal แบบ rollback) ให้ "คนเขียนล็อกทั้งไฟล์"
+# ระหว่างเขียน คนอ่านที่มาพร้อมกันจะเจอ "database is locked" แล้วโยน error ออกทันที
+# โดยไม่รอ (busy_timeout ค่าเริ่มต้น = 0) บนเครื่องนี้ที่ waitress เปิดไว้ 16 thread
+# และ bulk ยิงเขียนประวัติพร้อมกันได้อีก อาการนี้โผล่ตอนคนใช้พร้อมกันเท่านั้น จึงไม่เคย
+# เจอตอนทดสอบคนเดียว แต่เจอจริงตอนสาธิต
+#
+#   journal_mode=WAL  -> คนอ่านกับคนเขียนไม่บล็อกกันอีกต่อไป (คนอ่านเห็นภาพ ณ ตอน
+#                        เริ่มอ่าน ส่วนคนเขียนเขียนต่อท้ายไฟล์ -wal แยก) ค่านี้ติดอยู่กับ
+#                        ตัวไฟล์ฐานข้อมูลถาวร ตั้งครั้งเดียวก็พอ แต่สั่งซ้ำได้ไม่เสียหาย
+#   busy_timeout=5000 -> ถ้ายังชนกันจริง ๆ ให้ "รอ 5 วินาที" ก่อนยอมแพ้ แทนที่จะ
+#                        โยน error ทิ้งทันที (การเขียนของแอปนี้จบใน ~1 มิลลิวินาที)
+#   synchronous=NORMAL-> คู่มาตรฐานของ WAL: ยังทนโปรเซสตาย/ถูก OOM killer ฆ่าได้ครบ
+#                        เสียข้อมูลเฉพาะตอนไฟดับทั้งเครื่องและเสียแค่ธุรกรรมท้าย ๆ
+#                        ซึ่งแลกกับการไม่ต้อง fsync ทุกครั้งที่เขียน (เครื่องนี้ดิสก์ช้า)
+#
+# ⚠️ กับดักของ WAL ที่ต้องรู้: ไฟล์ฐานข้อมูลไม่ใช่ไฟล์เดียวอีกต่อไป มี app.db-wal และ
+# app.db-shm มาด้วย ใครเปิดฐานข้อมูลนี้ "เป็น root" จะสร้างสองไฟล์นั้นเป็นของ root
+# แล้วแอป (รันเป็น checkurl) จะเขียนไม่ได้ทั้งระบบ — deploy.sh จึงสำรองฐานข้อมูลใน
+# นามของ checkurl เสมอ ห้ามแก้กลับเป็นรันตรง ๆ ด้วย root
+def _apply_sqlite_pragmas(dbapi_connection, connection_record) -> None:
+    if not isinstance(dbapi_connection, sqlite3.Connection):
+        return  # ใช้ฐานข้อมูลอื่นผ่าน DATABASE_URL -> ไม่เกี่ยวกับ PRAGMA ชุดนี้
+    cursor = dbapi_connection.cursor()
+    try:
+        cursor.execute("PRAGMA journal_mode=WAL")
+        cursor.execute("PRAGMA busy_timeout=5000")
+        cursor.execute("PRAGMA synchronous=NORMAL")
+    finally:
+        cursor.close()
+
+
+# ผูกกับคลาส Engine (ไม่ใช่ engine ตัวใดตัวหนึ่ง) เพราะ Flask-SQLAlchemy สร้าง engine
+# ทีหลังตอน init_app และสร้างใหม่ได้อีกในเทสต์ — ตัวกรอง isinstance ข้างบนทำให้ engine
+# ที่ไม่ใช่ SQLite ไม่โดนผลกระทบ
+event.listen(Engine, "connect", _apply_sqlite_pragmas)
 
 
 def _security_headers(response):

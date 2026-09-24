@@ -25,7 +25,7 @@ import anon_quota
 import jobs
 from extensions import db, limiter
 from models import ApiKey, ScanHistory, User
-from analyzer import scan, scan_cache
+from analyzer import deep_limit, scan, scan_cache
 from analyzer.qr_payload import classify as classify_qr
 
 check_bp = Blueprint("check", __name__, url_prefix="/api")
@@ -100,6 +100,18 @@ def _attach_anon_quota(result: dict) -> dict:
     return result
 
 
+def _ran_deep(result: dict, requested: bool) -> bool:
+    """ชั้นลึกได้ทำจริงไหม — ไม่ใช่ "ขอมาหรือเปล่า"
+
+    ต่างกันได้เมื่อคิวตรวจเชิงลึกเต็มแล้ว scanner ถอยไปตอบผลชั้น 1-2 (deep_limit.py)
+    ถ้าเอาค่าที่ "ขอมา" ไปลงประวัติ ผู้ใช้จะเห็นรายการที่ติดป้ายว่าตรวจลึกแล้วทั้งที่ไม่ได้ตรวจ
+    """
+    deep = result.get("deep_check")
+    if isinstance(deep, dict) and "ran" in deep:
+        return bool(deep["ran"])
+    return requested
+
+
 def _save_history(user, result: dict, ran_deep: bool,
                   source: str = "link", qr_type: str = None, qr_thumb: str = None) -> None:
     if user is None or not result.get("ok"):
@@ -169,7 +181,7 @@ def api_check():
     if not result.get("ok"):
         return jsonify(result)
 
-    _save_history(user, result, run_deep)
+    _save_history(user, result, _ran_deep(result, run_deep))
     if user is None:
         result = _attach_anon_quota(result)
 
@@ -220,7 +232,7 @@ def _analyze_qr_payload(payload: str, user, thumb: str = None, save: bool = True
         scan_result = scan(payload, run_deep=run_deep)
         if scan_result.get("ok"):
             if save:
-                _save_history(user, scan_result, run_deep,
+                _save_history(user, scan_result, _ran_deep(scan_result, run_deep),
                               source="qr", qr_type="url", qr_thumb=thumb)
             if locked_reason:
                 # copy กันเขียนทับก้อนที่แชร์ใน scan_cache (เหตุผลใน _attach_anon_quota)
@@ -382,7 +394,7 @@ def api_check_bulk():
         # เขียนประวัติทีหลังในเธรดของงานนี้เธรดเดียว (db.session ใช้ข้ามเธรดไม่ได้)
         job_user = db.session.get(User, user_id)
         for r in results:
-            _save_history(job_user, r, True)  # ข้ามรายการที่ ok=False ให้เองอยู่แล้ว
+            _save_history(job_user, r, _ran_deep(r, True))  # ข้ามรายการที่ ok=False ให้เองอยู่แล้ว
         return results
 
     job_id = jobs.submit(current_app._get_current_object(), user_id, len(urls), work)
@@ -449,4 +461,7 @@ def health():
     """เช็กว่าเซิร์ฟเวอร์ยังอยู่ + ตัวเลขสุขภาพระบบ (ไม่มีข้อมูลผู้ใช้ จึงเปิดให้ทุกคนดูได้)"""
     return jsonify({"ok": True, "service": "phishing-link-checker",
                     "scan_cache": scan_cache.stats(), "bulk_jobs": jobs.stats(),
-                    "anon_quota": anon_quota.stats()})
+                    "anon_quota": anon_quota.stats(),
+                    # skipped ที่ขึ้นเรื่อย ๆ = คิวตรวจเชิงลึกตันบ่อย ถึงเวลาปรับ
+                    # DEEP_SCAN_CONCURRENCY หรือเพิ่มแรมเครื่อง (ดู deep_limit.py)
+                    "deep_scan": deep_limit.stats()})

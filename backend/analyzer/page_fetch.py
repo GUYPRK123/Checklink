@@ -28,13 +28,16 @@ page_fetch.py
     }
 
 ความปลอดภัย (SSRF): เช็ก IP ปลอดภัยก่อนต่อทุกครั้งผ่าน _resolve_safe_ips เหมือน
-ชั้นที่ 3 จำกัดขนาดที่ดาวน์โหลด (MAX_BYTES) และมี timeout — ตัวนี้ **ไม่รัน**
+ชั้นที่ 3 และต่อผ่าน safe_session ซึ่งเช็ก IP ปลายทางจริงอีกรอบหลัง socket ต่อติด
+(กัน DNS rebinding — ดูเหตุผลเต็มใน safe_http.py) จำกัดขนาดที่ดาวน์โหลด
+(MAX_BYTES) และมี timeout — ตัวนี้ **ไม่รัน**
 JavaScript ใด ๆ ทั้งสิ้น จึงยังปลอดภัยพอที่จะรันในโปรเซสเดียวกับแอปได้
 (ตัวที่รัน JS ต้องอยู่ในคอนเทนเนอร์แยกเสมอ ดู docs/content-analysis.md หัวข้อ 4)
 """
 from urllib.parse import urlsplit
 
 from .destination_checker import _resolve_safe_ips
+from .safe_http import BlockedAddressError, safe_session
 
 MAX_BYTES = 512 * 1024   # 512KB พอสำหรับ head+body ส่วนต้น ไม่ต้องโหลดทั้งหน้า
 TIMEOUT = (5, 10)        # (connect, read) วินาที — เหตุผลเดียวกับ destination_checker.py
@@ -70,49 +73,56 @@ def fetch_page(url: str) -> dict:
     if status:  # dns_fail หรือ blocked_ip -> ไม่ต่อ
         return empty_bundle(f"ไม่ปลอดภัยที่จะเชื่อมต่อ ({status})")
 
-    try:
-        resp = requests.get(url, timeout=TIMEOUT, headers={"User-Agent": USER_AGENT},
-                            stream=True)
-    except Exception:
-        return empty_bundle("เชื่อมต่อหน้าเว็บไม่ได้")
+    # ครอบทั้งก้อนด้วย with เพื่อให้ session (และ connection pool ของมัน) ถูกปิดทุกทาง
+    # ออกของฟังก์ชันนี้ ซึ่งมีหลายทางเพราะเงื่อนไข "ดึงไม่ได้" มีหลายแบบ
+    with safe_session() as session:
+        try:
+            resp = session.get(url, timeout=TIMEOUT, headers={"User-Agent": USER_AGENT},
+                               stream=True)
+        except BlockedAddressError:
+            # โดเมนสลับ DNS มาเป็น IP ภายในหลังผ่านด่านแรก — ไม่ใช่ "เว็บล่ม" แต่ผลลัพธ์
+            # ที่ต้องการเหมือนกันคือ "ดึงไม่ได้" ตัวที่ให้คะแนนสัญญาณนี้คือชั้นที่ 3
+            return empty_bundle("ปลายทางจริงเป็น IP ภายใน/สงวนไว้ (DNS rebinding)")
+        except Exception:
+            return empty_bundle("เชื่อมต่อหน้าเว็บไม่ได้")
 
-    # หน้า error (403/404/500) ไม่ใช่เนื้อหาจริงของเว็บนั้น การเอาไปวิเคราะห์จะได้
-    # สัญญาณขยะ เช่น "หน้าเล็กผิดปกติ" หรือ "ไม่มีลิงก์ไปหน้าอื่น" ซึ่งเป็นลักษณะของ
-    # หน้า error ทุกหน้าในโลก ไม่ได้บอกอะไรเกี่ยวกับเว็บที่ผู้ใช้ถามเลย
-    # กรณีที่เจอบ่อยที่สุดคือเว็บที่กันบอตแล้วตอบ 403 ให้เรา (เช่น pantip.com)
-    # ตามหลักของระบบ กรณีแบบนี้ต้องเป็น "เช็กไม่ได้" ไม่ใช่ "ตรวจแล้วไม่พบอะไร"
-    if resp.status_code >= 400:
-        code = resp.status_code
-        resp.close()
-        return empty_bundle(f"ปลายทางตอบ HTTP {code}")
+        # หน้า error (403/404/500) ไม่ใช่เนื้อหาจริงของเว็บนั้น การเอาไปวิเคราะห์จะได้
+        # สัญญาณขยะ เช่น "หน้าเล็กผิดปกติ" หรือ "ไม่มีลิงก์ไปหน้าอื่น" ซึ่งเป็นลักษณะของ
+        # หน้า error ทุกหน้าในโลก ไม่ได้บอกอะไรเกี่ยวกับเว็บที่ผู้ใช้ถามเลย
+        # กรณีที่เจอบ่อยที่สุดคือเว็บที่กันบอตแล้วตอบ 403 ให้เรา (เช่น pantip.com)
+        # ตามหลักของระบบ กรณีแบบนี้ต้องเป็น "เช็กไม่ได้" ไม่ใช่ "ตรวจแล้วไม่พบอะไร"
+        if resp.status_code >= 400:
+            code = resp.status_code
+            resp.close()
+            return empty_bundle(f"ปลายทางตอบ HTTP {code}")
 
-    ctype = resp.headers.get("Content-Type", "")
-    if "html" not in ctype.lower():
-        resp.close()
-        return empty_bundle("ปลายทางไม่ใช่หน้า HTML")
+        ctype = resp.headers.get("Content-Type", "")
+        if "html" not in ctype.lower():
+            resp.close()
+            return empty_bundle("ปลายทางไม่ใช่หน้า HTML")
 
-    chunks, total = [], 0
-    try:
-        for chunk in resp.iter_content(8192):
-            if not chunk:
-                break
-            chunks.append(chunk)
-            total += len(chunk)
-            if total >= MAX_BYTES:
-                break
-    except Exception:
-        pass
-    finally:
-        resp.close()
+        chunks, total = [], 0
+        try:
+            for chunk in resp.iter_content(8192):
+                if not chunk:
+                    break
+                chunks.append(chunk)
+                total += len(chunk)
+                if total >= MAX_BYTES:
+                    break
+        except Exception:
+            pass
+        finally:
+            resp.close()
 
-    if not chunks:
-        return empty_bundle("หน้าเว็บไม่มีเนื้อหา")
+        if not chunks:
+            return empty_bundle("หน้าเว็บไม่มีเนื้อหา")
 
-    encoding = resp.encoding or "utf-8"
-    try:
-        html = b"".join(chunks).decode(encoding, errors="ignore")
-    except LookupError:
-        html = b"".join(chunks).decode("utf-8", errors="ignore")
+        encoding = resp.encoding or "utf-8"
+        try:
+            html = b"".join(chunks).decode(encoding, errors="ignore")
+        except LookupError:
+            html = b"".join(chunks).decode("utf-8", errors="ignore")
 
     return {
         "ok": True,

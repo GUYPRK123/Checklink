@@ -33,7 +33,7 @@ scanner.py
 import time
 from concurrent.futures import ThreadPoolExecutor
 
-from . import scan_cache
+from . import deep_limit, scan_cache
 from .blacklist_api import check_blacklist
 from .combos import apply_combos
 from .url_parser import parse_url
@@ -299,7 +299,11 @@ def scan(url: str, run_deep: bool = True) -> dict:
     if cached is not None:
         return cached
     result = _scan_uncached(url, run_deep)
-    scan_cache.put(url, run_deep, result)
+    # เก็บแคชตาม "ชั้นที่ทำได้จริง" ไม่ใช่ชั้นที่ขอมา — ถ้าชั้นลึกถูกข้ามเพราะคิวเต็ม
+    # (deep_limit.py) ผลที่ได้คือผลของชั้น 1-2 ถ้าเผลอเก็บลงช่องของผลเชิงลึก คนที่ขอ
+    # ตรวจลึกลิงก์เดียวกันอีก 15 นาทีข้างหน้าจะได้ผลตื้นตามไปด้วยทั้งที่คิวว่างแล้ว
+    ran_deep = bool(result.get("deep_check", {}).get("ran"))
+    scan_cache.put(url, ran_deep, result)
     return result
 
 
@@ -342,6 +346,22 @@ def _dangerous_scheme_result(url: str, scheme: str, started: float) -> dict:
     }
 
 
+_BUSY_MESSAGE = ("ระบบกำลังตรวจเชิงลึกหลายลิงก์พร้อมกันจนเต็มคิว ครั้งนี้จึงได้ผลจากชั้นที่ 1-2 "
+                 "(บัญชีดำ สกมช. + การวิเคราะห์รูปร่างลิงก์) ซึ่งยังเชื่อถือได้ — ลองตรวจลิงก์นี้"
+                 "อีกครั้งในอีกสักครู่เพื่อให้ได้ผลเชิงลึกครบ")
+
+
+def _deep_check_payload(ran: bool, skipped_reason: str) -> dict:
+    """ก้อน deep_check ที่ส่งให้หน้าเว็บ — ต้องแยก "ข้ามเพราะระบบแน่น" ออกจาก
+    "ข้ามเพราะสิทธิ์ไม่ถึง" (locked_reason ซึ่ง check.py เป็นคนเติม) ให้ชัด
+    ไม่งั้นสมาชิกพรีเมียมจะเห็นข้อความชวนอัพเกรดทั้งที่จ่ายเงินแล้ว"""
+    if ran:
+        return {"ran": True}
+    if skipped_reason == "server_busy":
+        return {"ran": False, "skipped_reason": "server_busy", "message": _BUSY_MESSAGE}
+    return {"ran": False}
+
+
 def _scan_uncached(url: str, run_deep: bool = True) -> dict:
     """ตัวตรวจจริง — ไม่ผ่านแคช (แยกไว้เพื่อให้เทสต์/บังคับตรวจใหม่เรียกตรงได้)"""
     started = time.perf_counter()
@@ -364,34 +384,45 @@ def _scan_uncached(url: str, run_deep: bool = True) -> dict:
               "ssl": {"checked": False}, "content_checked": False,
               "content_facts": [], "combos_hit": [], "page_source": ""}
 
+    # ---- ขอที่ในคิวตรวจเชิงลึกก่อน (ดู deep_limit.py) ----
+    # ชั้น 3-4 คือส่วนที่ยิงเน็ตจริงและกินแรม ถ้าปล่อยให้ทุกคำขอทำพร้อมกันได้ไม่จำกัด
+    # เครื่องนี้ (แรม 458 MB, waitress 16 thread, bulk อีก 10 ชุด) จะถูก OOM killer
+    # ฆ่าทิ้งตอนคนใช้เยอะ — คิวเต็มจนหมดเวลารอ ให้ถอยไปตอบผลชั้น 1-2 ไม่ใช่ตอบ error
+    deep_skipped = ""
+    if run_deep and not deep_limit.acquire():
+        run_deep, deep_skipped = False, "server_busy"
+
     if run_deep:
-        destination = resolve_destination(url)  # ชั้น 3 (ปลายทางจริง)
-        extra_signals += _destination_signals(destination)
+        try:
+            destination = resolve_destination(url)  # ชั้น 3 (ปลายทางจริง)
+            extra_signals += _destination_signals(destination)
 
-        final_url = destination.get("final_url")
-        effective_parsed = parsed  # โดเมนที่จะใช้เป็น "ปลายทางจริง" สำหรับชั้นที่ 4
-        if destination.get("hops", 0) >= 1 and final_url and not destination.get("blocked"):
-            final_parsed = parse_url(final_url)
-            if final_parsed.get("valid") and final_parsed.get("registrable") != parsed.get("registrable"):
-                effective_parsed = final_parsed
-                final_api = check_blacklist(final_url)
-                final_analysis = analyze(final_parsed)
-                if final_api.get("found") and final_api.get("malicious"):
-                    api_result = final_api  # ปลายทางจริงอยู่ในบัญชีดำ -> ใช้ผลนี้แทน (สำคัญกว่า)
-                extra_signals += _merge_destination_analysis(final_analysis)
+            final_url = destination.get("final_url")
+            effective_parsed = parsed  # โดเมนที่จะใช้เป็น "ปลายทางจริง" สำหรับชั้นที่ 4
+            if destination.get("hops", 0) >= 1 and final_url and not destination.get("blocked"):
+                final_parsed = parse_url(final_url)
+                if final_parsed.get("valid") and final_parsed.get("registrable") != parsed.get("registrable"):
+                    effective_parsed = final_parsed
+                    final_api = check_blacklist(final_url)
+                    final_analysis = analyze(final_parsed)
+                    if final_api.get("found") and final_api.get("malicious"):
+                        api_result = final_api  # ปลายทางจริงอยู่ในบัญชีดำ -> ใช้ผลนี้แทน (สำคัญกว่า)
+                    extra_signals += _merge_destination_analysis(final_analysis)
 
-        # ---- ชั้นที่ 4 (เสริม) ----
-        # รันเฉพาะตอนที่ชั้น 1-3 ยังชี้ขาดไม่ได้ (ไม่ใช่ทั้งฟันธงแดงจากบัญชีดำ และไม่ใช่
-        # เขียวที่ยืนยันจากโดเมนแบรนด์จริงของต้นทางอยู่แล้ว) เพื่อประหยัดเวลา เพราะชั้นนี้
-        # ต้องออกนอกเครือข่ายหลายรอบ (RDAP, TLS handshake, ดึงหน้าเว็บ) ซึ่งช้ากว่าชั้น
-        # ก่อนหน้ามาก และไม่จำเป็นถ้ารู้ผลชัดเจนแล้ว
-        already_decided = (api_result.get("found") and api_result.get("malicious")) or analysis.get("verified_safe")
-        if not already_decided and not destination.get("blocked") and effective_parsed.get("valid"):
-            # ส่งเข้า sandbox ได้เฉพาะตอนที่ผลยังก้ำกึ่งจริง ๆ ถ้าคะแนนจากชั้น 1-3
-            # ทะลุเกณฑ์แดงไปแล้ว การรัน JavaScript เพิ่มก็ไม่เปลี่ยนคำตอบ มีแต่ทำให้ช้า
-            allow_sandbox = analysis["score"] < RED_SCORE
-            layer4_signals, layer4 = _run_layer4(effective_parsed, allow_sandbox)
-            extra_signals += layer4_signals
+            # ---- ชั้นที่ 4 (เสริม) ----
+            # รันเฉพาะตอนที่ชั้น 1-3 ยังชี้ขาดไม่ได้ (ไม่ใช่ทั้งฟันธงแดงจากบัญชีดำ และไม่ใช่
+            # เขียวที่ยืนยันจากโดเมนแบรนด์จริงของต้นทางอยู่แล้ว) เพื่อประหยัดเวลา เพราะชั้นนี้
+            # ต้องออกนอกเครือข่ายหลายรอบ (RDAP, TLS handshake, ดึงหน้าเว็บ) ซึ่งช้ากว่าชั้น
+            # ก่อนหน้ามาก และไม่จำเป็นถ้ารู้ผลชัดเจนแล้ว
+            already_decided = (api_result.get("found") and api_result.get("malicious")) or analysis.get("verified_safe")
+            if not already_decided and not destination.get("blocked") and effective_parsed.get("valid"):
+                # ส่งเข้า sandbox ได้เฉพาะตอนที่ผลยังก้ำกึ่งจริง ๆ ถ้าคะแนนจากชั้น 1-3
+                # ทะลุเกณฑ์แดงไปแล้ว การรัน JavaScript เพิ่มก็ไม่เปลี่ยนคำตอบ มีแต่ทำให้ช้า
+                allow_sandbox = analysis["score"] < RED_SCORE
+                layer4_signals, layer4 = _run_layer4(effective_parsed, allow_sandbox)
+                extra_signals += layer4_signals
+        finally:
+            deep_limit.release()
 
     if extra_signals:
         analysis = {**analysis,
@@ -426,5 +457,5 @@ def _scan_uncached(url: str, run_deep: bool = True) -> dict:
         "score": analysis["score"],               # คะแนนรวม (ไว้ในรายละเอียดทางเทคนิค)
         "elapsed_ms": elapsed_ms,                  # เวลาที่ใช้ตรวจ (ไว้ทำส่วนวัดความเร็ว)
         "api_checked": api_result.get("found", False),
-        "deep_check": {"ran": run_deep},
+        "deep_check": _deep_check_payload(run_deep, deep_skipped),
     }

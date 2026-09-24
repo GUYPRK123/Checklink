@@ -11,13 +11,39 @@ test_destination_checker.py — เทสต์การป้องกัน SS
 
 เทสต์ทั้งไฟล์นี้ **ไม่แตะเครือข่ายจริงเลย** — ใช้สองเทคนิค:
   1) IP ที่เขียนเป็นเลขตรง ๆ (literal): getaddrinfo แปลงได้โดยไม่ต้องถาม DNS
-  2) โดเมนสมมุติ: monkeypatch getaddrinfo/requests.head ให้ตอบตามที่เทสต์กำหนด
+  2) โดเมนสมมุติ: monkeypatch getaddrinfo + safe_session ให้ตอบตามที่เทสต์กำหนด
 จึงรันได้เร็วและผลไม่แกว่งตามสภาพเน็ต (หลักเดียวกับเทสต์อื่นทั้งโปรเจกต์)
 """
 import socket
 
 from analyzer.destination_checker import (
     MAX_HOPS, _is_blocked_ip, _resolve_safe_ips, resolve_destination)
+
+
+class _FakeSession:
+    """แทน safe_session() ในเทสต์ — โค้ดจริงยิงผ่าน session ไม่ใช่ requests ตรง ๆ แล้ว
+    (ตั้งแต่เพิ่มด่านเช็ก getpeername ใน safe_http.py) จึงต้องสวมรอยที่ระดับ session"""
+
+    def __init__(self, head_fn=None, get_fn=None):
+        self._head, self._get = head_fn, get_fn
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return False
+
+    def head(self, url, **kw):
+        return self._head(url, **kw)
+
+    def get(self, url, **kw):
+        return self._get(url, **kw)
+
+
+def _patch_head(monkeypatch, head_fn):
+    """ให้ทุก safe_session() ในชั้นที่ 3 คืน session ปลอมที่ head() ทำตาม head_fn"""
+    monkeypatch.setattr("analyzer.destination_checker.safe_session",
+                        lambda: _FakeSession(head_fn=head_fn))
 
 
 def _addrinfo(ip: str) -> list:
@@ -172,7 +198,7 @@ class TestResolveDestination:
             return _FakeResp(302, "http://127.0.0.1/admin")
 
         monkeypatch.setattr(socket, "getaddrinfo", fake_getaddrinfo)
-        monkeypatch.setattr("requests.head", fake_head)
+        _patch_head(monkeypatch, fake_head)
 
         result = resolve_destination("http://promo.example/win-prize")
 
@@ -197,7 +223,7 @@ class TestResolveDestination:
 
         monkeypatch.setattr(socket, "getaddrinfo",
                             lambda host, *a, **kw: _addrinfo("93.184.216.34"))
-        monkeypatch.setattr("requests.head", fake_head)
+        _patch_head(monkeypatch, fake_head)
 
         result = resolve_destination("http://hop0.example/")
         assert result["hops"] == MAX_HOPS
@@ -208,8 +234,7 @@ class TestResolveDestination:
     def test_ปลายทางตอบ_200_จบปกติ(self, monkeypatch):
         monkeypatch.setattr(socket, "getaddrinfo",
                             lambda host, *a, **kw: _addrinfo("93.184.216.34"))
-        monkeypatch.setattr("requests.head",
-                            lambda url, **kw: _FakeResp(200))
+        _patch_head(monkeypatch, lambda url, **kw: _FakeResp(200))
         result = resolve_destination("http://normal.example/page")
         assert result["resolved"] is True
         assert result["hops"] == 0
@@ -226,8 +251,7 @@ class TestResolveDestination:
             raise socket.gaierror(-2, "Name or service not known")
 
         monkeypatch.setattr(socket, "getaddrinfo", fake_getaddrinfo)
-        monkeypatch.setattr("requests.head",
-                            lambda url, **kw: _FakeResp(302, "http://gone.example/x"))
+        _patch_head(monkeypatch, lambda url, **kw: _FakeResp(302, "http://gone.example/x"))
 
         result = resolve_destination("http://alive.example/short")
         assert not result.get("blocked")

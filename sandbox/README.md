@@ -23,6 +23,13 @@ user เดียวกับเว็บ ช่องโหว่ของ Chro
 ก็ยังอ่านโฟลเดอร์แอปไม่ได้ เขียนไฟล์ได้แค่บ้านตัวเอง เพิ่มสิทธิ์ไม่ได้
 และใช้แรมเกิน 350 MB ไม่ได้ (ถ้าเกิน kernel ฆ่าเฉพาะบริการนี้ ไม่แตะเว็บหลัก)
 
+และ **ยิงเข้าเครือข่ายภายในไม่ได้** ด้วย `IPAddressDeny` ใน unit (ตัวกรองระดับ cgroup/eBPF
+จึงครอบทุกโปรเซสลูก ไม่ใช่การกรองในโค้ดที่ Chromium หนีได้) เป้าที่สำคัญที่สุดที่ปิดไปคือ
+`169.254.169.254` — metadata ของผู้ให้บริการคลาวด์ ซึ่งคาย credential ของ VPS ทั้งเครื่อง
+ออกมาเป็น HTTP ธรรมดาโดยไม่ต้องยืนยันตัวตนอะไรเลย ช่องที่เหลือไว้มีแค่ `127.0.0.1`
+(ทางที่เว็บหลักสั่งงาน sandbox) กับ stub DNS ของ systemd-resolved — รายละเอียดและเหตุผล
+ที่ห้ามลบสามบรรทัดนั้นอยู่ในคอมเมนต์ของ `checklink-sandbox.service`
+
 **ไม่เท่าการแยกเครื่องคนละใบ** แต่ได้ความปลอดภัยส่วนใหญ่โดยไม่ต้องดูแลสองเครื่อง
 ซึ่งตรงกับหลักในโปรเจกต์นี้ว่าอย่าเพิ่มจุดที่พังได้โดยไม่จำเป็น
 
@@ -60,7 +67,7 @@ sudo -H -u checklink-sandbox /home/checklink-sandbox/venv/bin/playwright install
 ```
 
 > **ต้องมี `-H` เสมอ** — `sudo -u` เฉย ๆ ไม่เปลี่ยน `$HOME` ให้ Chromium จะพยายาม
-> เขียนลง `/home/url/.cache` แล้วโดนปฏิเสธสิทธิ์
+> เขียนลง `/home/checkurl/.cache` แล้วโดนปฏิเสธสิทธิ์
 
 จากนั้นติดตั้งไลบรารีระบบที่ Chromium ต้องใช้ (บรรทัดเดียวที่ต้องเป็น root จริง ๆ
 เพราะมันเรียก `apt` ข้างใน):
@@ -74,22 +81,23 @@ sudo /home/checklink-sandbox/venv/bin/playwright install-deps chromium
 ### 4. วางไฟล์บริการ
 
 ```bash
-sudo cp /home/url/checkurl-app/Checklink/sandbox/sandbox_server.py \
+sudo cp /home/checkurl/Checklink/sandbox/sandbox_server.py \
         /home/checklink-sandbox/
 sudo chown checklink-sandbox:checklink-sandbox /home/checklink-sandbox/sandbox_server.py
 sudo chmod 0644 /home/checklink-sandbox/sandbox_server.py
 ```
 
 > **จงใจคัดลอกไฟล์ออกมา ไม่ได้ชี้เข้าโฟลเดอร์โปรเจกต์** เพราะ user นี้ต้องอ่าน
-> `/home/url/checkurl-app` ไม่ได้เลย เวลาแก้โค้ดต้องคัดลอกใหม่ทุกครั้ง
+> `/home/checkurl/Checklink` ไม่ได้เลย เวลาแก้โค้ดต้องคัดลอกใหม่ทุกครั้ง
 
-> ⚠️ **สิ่งเดียวที่กัน sandbox ไม่ให้อ่าน `.env` และ `app.db` คือสิทธิ์ของ `/home/url`**
+> ⚠️ **ด่านแรกที่กัน sandbox ไม่ให้อ่าน `.env` และ `app.db` คือสิทธิ์ของ `/home/checkurl`**
 > ซึ่งตอนนี้เป็น `drwxr-x---` (750, `other` ไม่มีสิทธิ์อะไรเลย) ส่วนไฟล์ข้างในเป็น
-> world-readable เกือบทั้งหมด **ถ้าวันไหนมีใคร `chmod 755 /home/url` การแยกสิทธิ์นี้
-> จะพังทันทีโดยไม่มีอะไรฟ้อง** ตรวจได้ด้วย:
+> world-readable เกือบทั้งหมด **ถ้าวันไหนมีใคร `chmod 755 /home/checkurl` ก็เหลือแต่
+> สิทธิ์ของไฟล์แต่ละตัวโดยไม่มีอะไรฟ้อง** (ตอนนี้ `.env` เป็น 600 และ `instance/` เป็น 750
+> จึงยังรอด แต่อย่าพึ่งข้อนั้นข้อเดียว) ตรวจด่านแรกได้ด้วย:
 >
 > ```bash
-> namei -lm /home/url/checkurl-app/Checklink/backend/.env | grep ' url$'
+> namei -lm /home/checkurl/Checklink/backend/.env | grep ' checkurl$'
 > # ต้องเห็น drwxr-x--- เท่านั้น
 > ```
 
@@ -106,7 +114,7 @@ echo "เอาค่านี้ไปใส่ SANDBOX_TOKEN ใน backend/.e
 ### 6. เปิดบริการ
 
 ```bash
-sudo cp /home/url/checkurl-app/Checklink/sandbox/checklink-sandbox.service \
+sudo cp /home/checkurl/Checklink/sandbox/checklink-sandbox.service \
         /etc/systemd/system/
 sudo systemctl daemon-reload
 sudo systemctl enable --now checklink-sandbox
@@ -124,6 +132,18 @@ curl -s -X POST http://127.0.0.1:8900/fetch \
      -d '{"url":"https://example.com"}' | head -c 300
 ```
 
+ถ้าคำสั่งที่สองคืน HTML มาได้ แปลว่าตัวกรอง IP (`IPAddressDeny`) ตั้งถูก คือยังออก
+อินเทอร์เน็ตและแปลงชื่อโดเมนได้ปกติ ตรวจว่าตัวกรองถูกโหลดจริงด้วย:
+
+```bash
+systemctl show checklink-sandbox -p IPAddressDeny -p IPAddressAllow
+# ต้องไม่ว่างทั้งสองค่า — ถ้าว่างคือ systemd ไม่ได้อ่านไฟล์ใหม่ (ลืม daemon-reload)
+```
+
+อาการเวลาตั้งผิด: `health` ยังตอบ 200 (เพราะแอปหลักยิงจาก 127.0.0.1 ซึ่งเปิดไว้) แต่
+`/fetch` คืน error ทุกเว็บ — เกือบทุกครั้งคือลืมเปิด stub DNS ของ systemd-resolved
+(127.0.0.53/127.0.0.54) ดูคอมเมนต์ในไฟล์ unit
+
 ### 8. บอกเว็บหลักให้เริ่มใช้
 
 เติมใน `backend/.env` (ดูตัวอย่างใน `.env.example`) แล้ว deploy
@@ -135,7 +155,7 @@ SANDBOX_TIMEOUT=12
 ```
 
 ```bash
-sudo /home/url/checkurl-app/Checklink/deploy/deploy.sh
+sudo /home/checkurl/Checklink/deploy/deploy.sh
 ```
 
 **ถ้าไม่เติมสองบรรทัดนี้ ระบบจะไม่เรียก sandbox เลยและทำงานเหมือนเดิมทุกอย่าง**
@@ -149,7 +169,7 @@ sudo /home/url/checkurl-app/Checklink/deploy/deploy.sh
 ไม่ใช่ไฟล์ในโปรเจกต์ แก้ในโปรเจกต์อย่างเดียวไม่มีผลอะไรทั้งสิ้น ต้องคัดลอกใหม่เสมอ:
 
 ```bash
-sudo cp /home/url/checkurl-app/Checklink/sandbox/sandbox_server.py /home/checklink-sandbox/ \
+sudo cp /home/checkurl/Checklink/sandbox/sandbox_server.py /home/checklink-sandbox/ \
   && sudo chown checklink-sandbox:checklink-sandbox /home/checklink-sandbox/sandbox_server.py \
   && sudo systemctl restart checklink-sandbox \
   && systemctl is-active checklink-sandbox
@@ -216,6 +236,6 @@ systemctl show checklink-sandbox -p MemoryPeak --value
 - **`logo_hotlink_brand`** — ถอดออกตอนขั้น 2 เพราะ false positive สูง แต่พอมี sandbox
   แล้วจะรู้ขนาด/ตำแหน่งจริงของรูป ทำให้แยก "โลโก้กลางหน้า" ออกจาก "ไอคอน 16px
   ท้ายหน้า" ได้ กฎนี้จึงกลับมาได้ (ดูเหตุผลเดิมใน `backend/analyzer/content_analyzer.py`)
-- **ยังไม่เคยรันจริง** — ตอนที่เขียน เครื่องยังไม่ได้ติดตั้ง Chromium
-  ส่วนที่เทสต์แล้วคือการกัน SSRF, การตรวจ token, และรูปร่างคำตอบ (เทสต์ 20 ข้อ)
-  ส่วนที่ยังไม่ได้พิสูจน์คือ Chromium เปิดหน้าเว็บได้จริงและใช้แรมเท่าไหร่
+- **ยังไม่ได้ย้ายไปคนละเครื่อง** — ตามที่ออกแบบไว้ sandbox ควรอยู่คนละเครื่องกับเว็บหลัก
+  ตอนนี้ยังรันเครื่องเดียวกัน (คนละ user + systemd hardening + `IPAddressDeny`) ซึ่งเป็น
+  เหตุผลเดียวที่ยังต้องเปิด `127.0.0.1` ไว้ในตัวกรอง IP — ถ้าย้ายได้ ให้ลบบรรทัดนั้นทิ้ง

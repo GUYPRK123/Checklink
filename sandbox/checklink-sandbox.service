@@ -2,7 +2,7 @@
 # checklink-sandbox.service — บริการ sandbox ที่รัน Chromium เปิดหน้าเว็บต้องสงสัย
 #
 # ติดตั้ง:
-#   sudo cp /home/url/checkurl-app/Checklink/sandbox/checklink-sandbox.service \
+#   sudo cp /home/checkurl/Checklink/sandbox/checklink-sandbox.service \
 #           /etc/systemd/system/
 #   sudo systemctl daemon-reload
 #   sudo systemctl enable --now checklink-sandbox
@@ -18,6 +18,16 @@ Description=Checklink sandbox (Chromium page fetcher)
 After=network-online.target
 Wants=network-online.target
 
+# ยอมแพ้หลังพลาด 5 ครั้งใน 1 นาที แทนที่จะวนรีสตาร์ตทุก 3 วินาทีไม่รู้จบ
+# (ตอนตั้งค่าผิดครั้งแรกมันวนไป 58 รอบก่อนจะมีคนสังเกตเห็น)
+# กลับมาลองใหม่ด้วย: sudo systemctl reset-failed checklink-sandbox && sudo systemctl start checklink-sandbox
+#
+# ⚠️ สองบรรทัดนี้ต้องอยู่ใน [Unit] ไม่ใช่ [Service] — เดิมวางผิดที่ systemd จึงทิ้งมันไป
+# เงียบ ๆ (เห็นได้ด้วย systemd-analyze verify: "Unknown key name ... in section Service")
+# แปลว่าเพดานที่คอมเมนต์ข้างบนบอกไว้ ไม่เคยทำงานจริงเลย
+StartLimitIntervalSec=60
+StartLimitBurst=5
+
 [Service]
 Type=simple
 User=checklink-sandbox
@@ -30,11 +40,6 @@ ExecStart=/home/checklink-sandbox/venv/bin/python /home/checklink-sandbox/sandbo
 
 Restart=always
 RestartSec=3
-# ยอมแพ้หลังพลาด 5 ครั้งใน 1 นาที แทนที่จะวนรีสตาร์ตทุก 3 วินาทีไม่รู้จบ
-# (ตอนตั้งค่าผิดครั้งแรกมันวนไป 58 รอบก่อนจะมีคนสังเกตเห็น)
-# กลับมาลองใหม่ด้วย: sudo systemctl reset-failed checklink-sandbox && sudo systemctl start checklink-sandbox
-StartLimitIntervalSec=60
-StartLimitBurst=5
 
 # ---- แรม: จุดสำคัญที่สุดของเครื่องนี้ ----
 # เครื่องมีแรมรวม 458 MB ถ้า Chromium บานเกินเพดาน ให้ kernel ฆ่า "เฉพาะบริการนี้"
@@ -54,7 +59,7 @@ PrivateDevices=no
 # ^ Chromium ต้องใช้ /dev/shm จึงปิดสนิทไม่ได้ (มี --disable-dev-shm-usage ช่วยอีกทาง)
 ProtectSystem=strict
 # ProtectHome=tmpfs ทำให้ /home กลายเป็นโฟลเดอร์ว่างเปล่าในสายตาบริการนี้ —
-# มองไม่เห็นแม้แต่ชื่อว่ามี /home/url อยู่ ซึ่งแรงกว่าการพึ่งสิทธิ์ของโฟลเดอร์อย่างเดียว
+# มองไม่เห็นแม้แต่ชื่อว่ามี /home/checkurl อยู่ ซึ่งแรงกว่าการพึ่งสิทธิ์ของโฟลเดอร์อย่างเดียว
 # แล้วค่อยต่อเฉพาะบ้านของตัวเองกลับเข้ามาด้วย BindPaths (ที่เก็บ venv + Chromium)
 #
 # ⚠️ ห้ามใช้ ProtectHome=yes คู่กับ ExecStart ที่อยู่ใต้ /home — จะได้ 203/EXEC
@@ -77,6 +82,34 @@ RemoveIPC=yes
 CapabilityBoundingSet=
 AmbientCapabilities=
 RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX AF_NETLINK
+
+# ---- เครือข่าย: ออกอินเทอร์เน็ตได้ แต่ห้ามแตะอะไรที่อยู่ "ข้างใน" ----
+# บริการนี้ปิดเน็ตทั้งหมดไม่ได้ เพราะหน้าที่ของมันคือเปิดเว็บที่เราสงสัย แต่ "ข้างใน"
+# ต้องปิดให้หมด เพราะถ้าหน้าเว็บของมิจฉาชีพสั่งให้ Chromium ยิงเข้ามาได้ เป้าที่มีค่า
+# ที่สุดคือ 169.254.169.254 (metadata ของผู้ให้บริการคลาวด์ ซึ่งคาย credential ของ
+# VPS ทั้งเครื่องออกมาเป็น HTTP ธรรมดาโดยไม่ต้องยืนยันตัวตนอะไรเลย) ถัดมาคือบริการ
+# ในวง LAN ที่ไม่ได้ตั้งใจเปิดออกเน็ต
+#
+# ตัวกรองนี้ทำงานที่ระดับ cgroup (eBPF) ไม่ใช่ในโค้ด จึงกันได้ทั้งขาออกและขาเข้า และ
+# ครอบทุกโปรเซสลูกของบริการนี้ — Chromium จะเปิด socket เองอีกทางก็ไม่รอด
+#
+# ⚠️ IPAddressAllow สามบรรทัดล่างจำเป็นจริง ห้ามลบ (กติกาของ systemd: prefix ที่ยาวกว่า
+#    ชนะ ดังนั้น /32 เอาชนะ localhost ซึ่งหมายถึง 127.0.0.0/8 ทั้งวงได้)
+#      127.0.0.1  = ทางที่แอปหลักยิงเข้ามาสั่งงาน sandbox (sandbox ฟังที่ 127.0.0.1:8900)
+#                   ตัวกรองนี้กันขาเข้าด้วย ถ้าไม่เปิดไว้ แอปหลักจะติดต่อ sandbox ไม่ได้เลย
+#      127.0.0.53, 127.0.0.54 = stub DNS ของ systemd-resolved ซึ่งเป็น nameserver
+#                   เดียวใน /etc/resolv.conf ของเครื่องนี้ ถ้าไม่เปิด จะแปลงชื่อโดเมน
+#                   ไม่ได้เลย = เปิดเว็บไม่ขึ้นทุกเว็บ (พลาดข้อนี้จะหาสาเหตุยากมาก
+#                   เพราะอาการออกมาเป็น "เว็บโหลดไม่ขึ้น" ไม่ใช่ "ถูกบล็อก")
+#
+# ราคาที่ยอมจ่าย: การเปิด 127.0.0.1 ทำให้ Chromium ยังยิงถึงพอร์ตอื่นบน loopback ได้
+# (เช่นตัวเว็บหลักที่ 127.0.0.1:5000) ซึ่งเป็น API สาธารณะอยู่แล้วจึงไม่ได้ข้อมูลเพิ่ม
+# ส่วน app.db กับ SECRET_KEY ยังกันด้วยคนละผู้ใช้ + ProtectHome=tmpfs ตามเดิม
+# **ถ้าวันไหนย้าย sandbox ไปคนละเครื่องตามที่ออกแบบไว้ ให้ลบบรรทัด 127.0.0.1 ออกทันที**
+IPAddressDeny=localhost link-local multicast 10.0.0.0/8 172.16.0.0/12 192.168.0.0/16 100.64.0.0/10 192.0.0.0/24 198.18.0.0/15 240.0.0.0/4 fc00::/7
+IPAddressAllow=127.0.0.1/32
+IPAddressAllow=127.0.0.53/32
+IPAddressAllow=127.0.0.54/32
 SystemCallArchitectures=native
 UMask=0077
 

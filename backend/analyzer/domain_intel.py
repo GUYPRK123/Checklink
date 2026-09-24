@@ -30,13 +30,15 @@ destination_checker.py) จึงไม่เพิ่มคะแนนใด �
 ของเครือข่าย ณ ขณะนั้น
 
 ปลอดภัยจาก SSRF: ก่อนต่อ TLS ไปยัง host ใด ๆ จะเช็ก IP ปลอดภัยด้วยฟังก์ชันเดียวกับ
-ชั้นที่ 3 (destination_checker._resolve_safe_ips) ก่อนเสมอ
+ชั้นที่ 3 (destination_checker._resolve_safe_ips) ก่อนเสมอ แล้วเช็ก IP ปลายทางจริง
+อีกรอบหลัง socket ต่อติด (safe_http) เพื่อกัน DNS rebinding — สำคัญเป็นพิเศษกับ
+ฟังก์ชัน TLS ตรงนี้ เพราะมันต่อ socket เองโดยไม่ผ่าน requests
 """
-import socket
 import ssl
 from datetime import datetime, timezone
 
 from .destination_checker import _resolve_safe_ips
+from .safe_http import BlockedAddressError, safe_create_connection, safe_session
 from .config import WEIGHTS
 
 RDAP_TIMEOUT = 4     # วินาที
@@ -165,13 +167,16 @@ def check_domain_age(registrable: str) -> dict:
     except ImportError:
         return {"checked": False}
     try:
-        resp = requests.get(
-            f"https://rdap.org/domain/{registrable}",
-            timeout=RDAP_TIMEOUT, headers={"Accept": "application/rdap+json"})
-        if resp.status_code != 200:
-            return {"checked": False}
-        data = resp.json()
+        with safe_session() as session:
+            resp = session.get(
+                f"https://rdap.org/domain/{registrable}",
+                timeout=RDAP_TIMEOUT, headers={"Accept": "application/rdap+json"})
+            if resp.status_code != 200:
+                return {"checked": False}
+            data = resp.json()
     except Exception:
+        # รวม BlockedAddressError ด้วย — อ่านอายุโดเมนไม่ได้คือ "เช็กไม่ได้" เฉย ๆ
+        # ไม่ใช่สัญญาณเสี่ยง (ตัวที่ให้คะแนน DNS rebinding คือชั้นที่ 3)
         return {"checked": False}
 
     return _extract_registration(data)
@@ -196,11 +201,16 @@ def check_ssl_certificate(host: str, port: int = 443) -> dict:
 
     ctx = ssl.create_default_context()
     try:
-        with socket.create_connection((host, port), timeout=SSL_TIMEOUT) as sock:
+        # safe_create_connection ตรวจ IP ปลายทางจริงให้ "ก่อน" TLS handshake
+        with safe_create_connection(host, port, timeout=SSL_TIMEOUT) as sock:
             with ctx.wrap_socket(sock, server_hostname=host) as ssock:
                 cert = ssock.getpeercert()
     except ssl.SSLCertVerificationError as e:
         return {"checked": True, "valid": False, "error": str(e)}
+    except BlockedAddressError:
+        # โดเมนสลับ DNS มาเป็น IP ภายใน -> ไม่ได้ certificate มา = เช็กไม่ได้
+        # (ไม่ใช่ valid=False ซึ่งหมายถึง "handshake สำเร็จแต่ cert ใช้ไม่ได้")
+        return {"checked": False}
     except Exception:
         return {"checked": False}
 
