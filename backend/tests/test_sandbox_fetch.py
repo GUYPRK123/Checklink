@@ -63,6 +63,28 @@ class Testยังไม่ได้ตั้งค่า:
         assert b["source"] == "sandbox"
 
 
+class _FakeSession:
+    """แทน safe_session() — page_fetch ยิงผ่าน session ไม่ใช่ requests.get ตรง ๆ แล้ว
+    (ตั้งแต่เพิ่มด่านกัน DNS rebinding ใน safe_http.py) ถ้ายังไปสวมรอย requests.get
+    เทสต์จะหลุดไปยิงเน็ตจริงแทน"""
+
+    def __init__(self, resp):
+        self._resp = resp
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return False
+
+    def get(self, url, **kw):
+        return self._resp
+
+
+def ให้หน้าเว็บตอบ(monkeypatch, page_fetch, resp):
+    monkeypatch.setattr(page_fetch, "safe_session", lambda: _FakeSession(resp))
+
+
 class Testหน้าerrorต้องนับเป็นเช็กไม่ได้:
     """403/404/500 ไม่ใช่เนื้อหาจริงของเว็บนั้น ถ้าเอาไปวิเคราะห์จะได้สัญญาณขยะ
     (หน้าสั้น ไม่มีลิงก์ ไม่มี favicon) ซึ่งเป็นลักษณะของหน้า error ทุกหน้าในโลก
@@ -86,8 +108,7 @@ class Testหน้าerrorต้องนับเป็นเช็กไม�
             def close(self):
                 pass
 
-        import requests
-        monkeypatch.setattr(requests, "get", lambda *a, **k: FakeResp())
+        ให้หน้าเว็บตอบ(monkeypatch, page_fetch, FakeResp())
         monkeypatch.setattr(page_fetch, "_resolve_safe_ips",
                             lambda host: ("1.2.3.4", "", ""))
 
@@ -110,8 +131,7 @@ class Testหน้าerrorต้องนับเป็นเช็กไม�
             def close(self):
                 pass
 
-        import requests
-        monkeypatch.setattr(requests, "get", lambda *a, **k: FakeResp())
+        ให้หน้าเว็บตอบ(monkeypatch, page_fetch, FakeResp())
         monkeypatch.setattr(page_fetch, "_resolve_safe_ips",
                             lambda host: ("1.2.3.4", "", ""))
 
