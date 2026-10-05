@@ -10,7 +10,7 @@ ApiKey          กุญแจสำหรับเรียก /api/check แ�
 """
 import hashlib
 import secrets
-from datetime import datetime, date, timedelta
+from datetime import datetime, date
 
 from flask_login import UserMixin
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -51,12 +51,6 @@ class User(UserMixin, db.Model):
     @property
     def is_premium(self) -> bool:
         return self.plan == "premium" and bool(self.premium_until) and self.premium_until > datetime.utcnow()
-
-    def activate_premium(self, duration_days: int) -> None:
-        now = datetime.utcnow()
-        base = self.premium_until if (self.premium_until and self.premium_until > now) else now
-        self.plan = "premium"
-        self.premium_until = base + timedelta(days=duration_days)
 
     def to_public_dict(self) -> dict:
         return {

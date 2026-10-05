@@ -56,6 +56,13 @@ class Config:
     SESSION_COOKIE_SAMESITE = "Lax"
     SESSION_COOKIE_SECURE = _bool_env("SESSION_COOKIE_SECURE", ENV == "production")
 
+    # คุกกี้ "จดจำฉัน" ของ Flask-Login (auth.py ล็อกอินด้วย remember=True) เป็นคุกกี้แยกจาก
+    # session และไม่อ่านค่า SESSION_COOKIE_* ข้างบน — ค่าเริ่มต้นของมันคือ Secure=False,
+    # SameSite=None ถ้าไม่ตั้งไว้ คุกกี้ที่ใช้ล็อกอินแทนได้ 365 วันจะถูกส่งผ่าน http ธรรมดาด้วย
+    REMEMBER_COOKIE_HTTPONLY = True
+    REMEMBER_COOKIE_SAMESITE = SESSION_COOKIE_SAMESITE
+    REMEMBER_COOKIE_SECURE = SESSION_COOKIE_SECURE
+
     WTF_CSRF_TIME_LIMIT = None  # token อายุเท่ากับ session ไม่หมดอายุแยก
 
     PREMIUM_PRICE_THB = int(os.environ.get("PREMIUM_PRICE_THB", "99"))
