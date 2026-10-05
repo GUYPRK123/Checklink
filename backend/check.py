@@ -434,6 +434,20 @@ def api_history():
     return jsonify({"ok": True, "history": [r.to_dict() for r in rows]})
 
 
+def _csv_safe(value):
+    """หุ้มค่าที่ขึ้นต้นเหมือนสูตร เพื่อกัน CSV Formula Injection
+
+    โปรแกรมตาราง(Excel/LibreOffice) จะรันค่าที่ขึ้นต้นด้วย = + - @ เป็นสูตร
+    ถ้าผู้โจมตีทำ QR ที่ payload เป็น =cmd|... แล้วเหยื่อ export ประวัติมาเปิด
+    สูตรจะถูกรันทันที (เปิดโปรแกรม/รันคำสั่งได้) จึงเติมเครื่องหมาย ' นำหน้า
+    ให้โปรแกรมตารางมองเป็นข้อความล้วน ไม่ใช่สูตร (วิธีมาตรฐานตาม OWASP)
+    """
+    text = "" if value is None else str(value)
+    if text and text[0] in ("=", "+", "-", "@", "\t", "\r"):
+        return "'" + text
+    return text
+
+
 @check_bp.route("/history/export", methods=["GET"])
 def api_history_export():
     user, _ = _current_actor()
@@ -449,8 +463,10 @@ def api_history_export():
     writer.writerow(["url", "verdict_color", "verdict_label", "ran_deep_check",
                       "source", "qr_type", "created_at"])
     for r in rows:
-        writer.writerow([r.url, r.verdict_color, r.verdict_label, r.ran_deep_check,
-                          r.source or "link", r.qr_type or "", r.created_at.isoformat()])
+        writer.writerow([_csv_safe(r.url), _csv_safe(r.verdict_color),
+                          _csv_safe(r.verdict_label), _csv_safe(r.ran_deep_check),
+                          _csv_safe(r.source or "link"), _csv_safe(r.qr_type or ""),
+                          _csv_safe(r.created_at.isoformat())])
 
     return Response(buf.getvalue(), mimetype="text/csv", headers={
         "Content-Disposition": "attachment; filename=scan_history.csv"})

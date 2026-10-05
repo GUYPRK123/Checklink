@@ -14,7 +14,7 @@ from flask import Blueprint, request, jsonify, current_app
 from flask_login import login_required, current_user
 
 from extensions import db, limiter
-from models import Payment, ApiKey
+from models import Payment, ApiKey, User
 
 billing_bp = Blueprint("billing", __name__, url_prefix="/api/billing")
 
@@ -98,13 +98,47 @@ def checkout():
         return jsonify({"ok": False, "error": "กรุณาเลือกวิธีชำระเงิน (card หรือ promptpay)"}), 400
 
     cfg = current_app.config
+
+    # กัน Checkout Race Condition: ถ้ายิง checkout พร้อมกันหลายคำขอ (กดรัว ๆ หรือสคริปต์
+    # ยิงขนาน) โดยไม่ป้องกัน แต่ละคำขอจะสร้าง Payment และต่ออายุพรีเมียมซ้อนกัน ทำให้
+    # ได้พรีเมียมยาวเกินจริงเป็นเท่าตัว
+    #
+    # วิธีแก้แบบ atomic (กันได้แม้บน SQLite ที่ไม่รองรับ row lock เต็มรูปแบบ):
+    # สั่ง UPDATE แถวผู้ใช้ให้เป็นพรีเมียม "เฉพาะเมื่อยังไม่เป็นพรีเมียม" ในคำสั่งเดียว
+    # ฐานข้อมูลรับประกันว่าการ UPDATE แต่ละแถวเกิดทีละคำสั่ง (serialized) ดังนั้นในบรรดา
+    # คำขอที่ยิงพร้อมกัน จะมีเพียงคำขอเดียวที่เงื่อนไข "ยังไม่เป็นพรีเมียม" เป็นจริงและ
+    # อัปเดตสำเร็จ (rowcount=1) ที่เหลือจะเห็นว่าเป็นพรีเมียมแล้วและไม่สร้าง Payment ซ้ำ
+    from datetime import datetime, timedelta
+    now = datetime.utcnow()
+    new_until = now + timedelta(days=cfg["PREMIUM_DURATION_DAYS"])
+
+    winner = (db.session.query(User)
+              .filter(User.id == current_user.id)
+              .filter((User.plan != "premium") |
+                      (User.premium_until == None) |
+                      (User.premium_until <= now))
+              .update({"plan": "premium", "premium_until": new_until},
+                      synchronize_session=False))
+    db.session.commit()
+
+    if not winner:
+        # มีคำขออื่นชนะไปแล้ว (หรือเป็นพรีเมียมอยู่ก่อน) -> ไม่เรียกเก็บเงินซ้ำ
+        db.session.refresh(current_user)
+        return jsonify({
+            "ok": True,
+            "demo_notice": "บัญชีนี้เป็นสมาชิกพรีเมียมอยู่แล้ว ไม่มีการเรียกเก็บเงินซ้ำ",
+            "already_premium": True,
+            "user": current_user.to_public_dict(),
+        })
+
+    # คำขอนี้เป็นผู้ชนะ -> สร้าง Payment หนึ่งรายการ
     payment = Payment(
         user_id=current_user.id, plan="premium", method=method,
         amount_thb=cfg["PREMIUM_PRICE_THB"], fake_txn_id=Payment.new_fake_txn_id(),
     )
     db.session.add(payment)
-    current_user.activate_premium(cfg["PREMIUM_DURATION_DAYS"])
     db.session.commit()
+    db.session.refresh(current_user)
 
     return jsonify({
         "ok": True,
