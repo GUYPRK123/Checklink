@@ -256,10 +256,11 @@ SESSION_COOKIE_SECURE=true   # ตั้งได้ "หลัง" มี HTTPS
 | `POST /api/check/qr/bulk` | พรีเมียม | body = `{"items": [{"payload": "..."}]}` — **ตอบ 202 + `job_id`** |
 | `GET /api/check/bulk/<job_id>` | เจ้าของงาน | ถามความคืบหน้า/ผลของงาน bulk |
 | `GET /api/history` | สมาชิก | 50 รายการล่าสุด |
+| `DELETE /api/history` | สมาชิก (session + CSRF เท่านั้น ไม่รับ API key) | ล้างประวัติทั้งหมดของตัวเอง ตอบ `{"deleted": n}` |
 | `GET /api/history/export` | พรีเมียม | CSV |
 | `GET /api/health` | ทุกคน | สถานะ + สถิติแคช, งาน bulk, โควตา anon และคิวตรวจเชิงลึก (`deep_scan`) |
 
-ทุก endpoint ข้างบนรับได้ทั้ง **cookie จากการล็อกอิน** และ **header `X-API-Key`** (พรีเมียม)
+ทุก endpoint ข้างบน (ยกเว้น `DELETE /api/history`) รับได้ทั้ง **cookie จากการล็อกอิน** และ **header `X-API-Key`** (พรีเมียม)
 
 ### การตรวจแบบ bulk เป็นงานเบื้องหลัง
 

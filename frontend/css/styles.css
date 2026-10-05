@@ -65,6 +65,8 @@ strong{font-weight:600}
 .btn:focus-visible{outline:3px solid rgba(47,111,237,.4); outline-offset:2px}
 .btn.secondary{background:#eef2f9; color:var(--ink)}
 .btn.secondary:hover{background:#e3e9f5}
+.btn.danger{background:var(--red-bg); color:var(--red)}
+.btn.danger:hover{background:#fbdcdf}
 
 .examples{margin-top:13px; font-size:.85rem; color:var(--muted); display:flex; flex-wrap:wrap; gap:8px; align-items:center}
 .chip{font-family:"IBM Plex Mono",monospace; font-size:.78rem; cursor:pointer; padding:4px 9px;
@@ -324,6 +326,8 @@ details.tech>summary::-webkit-details-marker{display:none}
 .history-badge.green{background:var(--green-bg); color:var(--green)}
 .history-badge.yellow{background:var(--amber-bg); color:var(--amber)}
 .history-badge.red{background:var(--red-bg); color:var(--red)}
+.history-actions .btn{flex:1; padding:10px 14px; font-size:.92rem}
+#history-msg:not(:empty){margin-top:12px}
 .apikey-box{font-family:"IBM Plex Mono",monospace; font-size:.85rem; background:#f0f3f9;
   border:1px solid var(--line); border-radius:8px; padding:10px 12px; word-break:break-all; margin-top:10px}
 textarea.bulk-input{width:100%; min-height:110px; font-family:"IBM Plex Mono",monospace; font-size:.9rem;

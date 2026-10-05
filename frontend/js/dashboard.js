@@ -37,8 +37,34 @@ async function init() {
       window.location.href = "premium.html";
     });
   }
+  document.getElementById("clear-history-btn")
+    .addEventListener("click", () => clearHistory(status.is_premium));
 
   await refreshHistory();
+}
+
+async function clearHistory(isPremium) {
+  // ลบถาวรและกู้คืนไม่ได้ จึงถามก่อนเสมอ — พรีเมียมบอกผลข้างเคียงเรื่อง "เคยสแกนแล้ว" ด้วย
+  // (_seen_before ใน check.py อ่านจากประวัตินี้) ผู้ใช้จะไม่เห็นคำเตือน QR ที่เคยเจอว่าอันตรายอีก
+  const lines = ["ล้างประวัติการตรวจทั้งหมด?", "", "ลบแล้วกู้คืนไม่ได้"];
+  if (isPremium) {
+    lines.push("ระบบจะลืมด้วยว่าเคยสแกน QR ไหนแล้วพบว่าอันตราย",
+               "ถ้าอยากเก็บไว้ ให้กด Export CSV ก่อน");
+  }
+  if (!window.confirm(lines.join("\n"))) return;
+
+  const btn = document.getElementById("clear-history-btn");
+  const msg = document.getElementById("history-msg");
+  btn.disabled = true;
+  msg.innerHTML = "";
+  try {
+    const { deleted } = await history.clear();
+    await refreshHistory();
+    msg.innerHTML = `<div class="form-success">ล้างประวัติแล้ว ${esc(deleted)} รายการ</div>`;
+  } catch (err) {
+    msg.innerHTML = `<div class="form-error">${esc(err.message)}</div>`;
+    btn.disabled = false;
+  }
 }
 
 async function refreshHistory() {
@@ -74,6 +100,7 @@ const QR_TYPE_LABEL = {
 
 function renderHistory(rows) {
   const el = document.getElementById("history-list");
+  document.getElementById("clear-history-btn").disabled = !rows.length;
   if (!rows.length) {
     el.innerHTML = `<p style="color:var(--muted); font-size:.88rem">ยังไม่มีประวัติการตรวจ</p>`;
     return;

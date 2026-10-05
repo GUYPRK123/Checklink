@@ -5,7 +5,7 @@ Blueprint หลักของฟีเจอร์ตรวจลิงก์ 
   - ไม่ล็อกอิน: ตรวจชั้น 1-2 ได้ ANON_CHECKS_PER_DAY ครั้ง/วัน/IP (ดู anon_quota.py)
   - ล็อกอินฟรี: ตรวจชั้น 1-2 ไม่จำกัด / พรีเมียม: ได้การตรวจเชิงลึก (ชั้น 3-4) เพิ่ม
   - /api/check/bulk        เช็คหลายลิงก์พร้อมกัน (พรีเมียมเท่านั้น)
-  - /api/history            ประวัติการตรวจของผู้ใช้ที่ล็อกอิน
+  - /api/history            ประวัติการตรวจของผู้ใช้ที่ล็อกอิน (DELETE = ล้างประวัติทั้งหมด)
   - /api/history/export     export ประวัติเป็น CSV (พรีเมียมเท่านั้น)
 
 หมายเหตุเรื่อง CSRF: blueprint นี้ยกเว้น CSRF protection (ดู app.py ตอน register blueprint)
@@ -23,7 +23,7 @@ from flask_login import current_user
 
 import anon_quota
 import jobs
-from extensions import db, limiter
+from extensions import csrf, db, limiter
 from models import ApiKey, ScanHistory, User
 from analyzer import deep_limit, scan, scan_cache
 from analyzer.qr_payload import classify as classify_qr
@@ -432,6 +432,30 @@ def api_history():
     rows = (user.history.order_by(ScanHistory.created_at.desc())
             .limit(page_size).all())
     return jsonify({"ok": True, "history": [r.to_dict() for r in rows]})
+
+
+@check_bp.route("/history", methods=["DELETE"])
+@limiter.limit("10 per minute")
+def api_history_clear():
+    """ล้างประวัติการตรวจทั้งหมดของตัวเอง (ปุ่ม "ล้างประวัติ" ในหน้าบัญชีของฉัน)
+
+    รับเฉพาะ session login ไม่รับ API key ต่างจาก GET /history — เป็นปุ่มของหน้าเว็บ
+    และไม่ควรให้ key ที่หลุดไปลบหลักฐานการตรวจย้อนหลังทิ้งได้
+
+    ต้องเช็ก CSRF เองตรงนี้ เพราะทั้ง blueprint ถูกยกเว้นไว้ (ดูหัวไฟล์) จริงอยู่ว่า DELETE
+    ข้ามเว็บโดน CORS preflight กันอยู่แล้วตราบที่ไม่ได้ตั้ง CORS_ORIGINS แต่การลบข้อมูลถาวร
+    ไม่ควรพึ่งค่าตั้งตัวเดียว — ใช้ด่านเดียวกับ endpoint อื่นที่แก้ข้อมูลผ่าน session
+    """
+    if not current_user.is_authenticated:
+        return jsonify({"ok": False, "error": "กรุณาล็อกอินก่อน"}), 401
+    csrf.protect()
+
+    # ลบทั้งหมดในคำสั่งเดียว ไม่ใช่แค่ 50 รายการที่หน้าเว็บแสดง
+    # ผลข้างเคียงที่ตั้งใจ: _seen_before() จะลืมด้วยว่าเคยสแกน QR ไหนมาแล้ว
+    deleted = (ScanHistory.query.filter_by(user_id=current_user.id)
+               .delete(synchronize_session=False))
+    db.session.commit()
+    return jsonify({"ok": True, "deleted": deleted})
 
 
 def _csv_safe(value):

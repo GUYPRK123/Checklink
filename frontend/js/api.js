@@ -157,4 +157,6 @@ export const billing = {
 export const history = {
   list: () => fetch(`${BASE_URL}/api/history`, { credentials: "include" }).then(r => r.json()),
   exportUrl: () => `${BASE_URL}/api/history/export`,
+  // ต้องผ่าน authedFetch เพราะ backend เช็ก CSRF ที่ endpoint นี้ (ต่างจาก /api/check*)
+  clear: () => authedFetch("/api/history", { method: "DELETE" }),
 };
