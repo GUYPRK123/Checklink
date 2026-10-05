@@ -47,12 +47,24 @@ loginForm.addEventListener("submit", async (e) => {
 registerForm.addEventListener("submit", async (e) => {
   e.preventDefault();
   msgEl.innerHTML = "";
+  const email = document.getElementById("reg-email").value.trim();
+  const password = document.getElementById("reg-password").value;
+  let res;
   try {
-    await auth.register(
-      document.getElementById("reg-email").value.trim(),
-      document.getElementById("reg-password").value);
-    window.location.href = "dashboard.html";
+    res = await auth.register(email, password);
   } catch (err) {
     showError(err.message);
+    return;
+  }
+  // backend ไม่ auto-login หลังสมัครแล้ว (กัน email enumeration ดู auth.py) ถ้าพาไป
+  // dashboard ตรง ๆ ผู้ใช้จะเจอหน้า "กรุณาเข้าสู่ระบบ" ทันทีหลังสมัครเสร็จ จึงล็อกอินต่อให้เอง
+  // ถ้าล็อกอินไม่ผ่าน (อีเมลมีอยู่แล้วแต่รหัสไม่ตรง) ให้ไปแท็บเข้าสู่ระบบพร้อมข้อความกลาง ๆ จาก backend
+  try {
+    await auth.login(email, password);
+    window.location.href = "dashboard.html";
+  } catch {
+    activate("login");
+    document.getElementById("login-email").value = email;
+    msgEl.innerHTML = `<div class="form-success">${res.message}</div>`;
   }
 });
