@@ -43,21 +43,20 @@ def register():
     if err:
         return jsonify({"ok": False, "error": err}), 400
 
-    # กัน Email Enumeration: ต้องไม่บอกว่าอีเมลนี้มีในระบบแล้วหรือยัง ไม่งั้นผู้โจมตี
-    # ยิงอีเมลจำนวนมากเข้ามาแล้วดูจากคำตอบว่าใครเป็นสมาชิก (กวาดรายชื่อสมาชิกได้)
-    # จึงตอบข้อความกลาง ๆ เหมือนกันทุกกรณี และไม่ auto-login (ผู้สมัครจริงไป login เอง)
-    existing = User.query.filter_by(email=email).first()
-    if existing is None:
-        user = User(email=email)
-        user.set_password(password)
-        db.session.add(user)
-        db.session.commit()
-    # ถ้าอีเมลมีอยู่แล้ว ไม่ทำอะไร แต่ตอบเหมือนกรณีสมัครใหม่ทุกประการ
-    return jsonify({
-        "ok": True,
-        "message": "หากอีเมลนี้ยังไม่เคยสมัคร ระบบได้สร้างบัญชีให้แล้ว "
-                   "กรุณาเข้าสู่ระบบด้วยอีเมลและรหัสผ่านที่กรอก",
-    })
+    # บอกตรง ๆ ว่าอีเมลถูกใช้แล้ว — จงใจ ไม่ได้ลืมกัน email enumeration
+    # เคยลองตอบข้อความกลาง ๆ แล้ว (bfdaea1) แต่ยังแยกออกได้ทั้งจากเวลาตอบ (อีเมลใหม่ต้อง
+    # hash รหัสผ่าน ~150ms อีเมลเดิมตอบใน ~3ms) และจากการสมัครแล้วลองล็อกอินต่อ
+    # จะปิดได้จริงต้องมีขั้นยืนยันอีเมล ซึ่งระบบนี้ยังไม่มี — ระหว่างนี้ limit 5/นาทีข้างบนจำกัดการไล่เดา
+    if User.query.filter_by(email=email).first():
+        return jsonify({"ok": False, "error": "อีเมลนี้ถูกใช้สมัครแล้ว"}), 409
+
+    user = User(email=email)
+    user.set_password(password)
+    db.session.add(user)
+    db.session.commit()
+
+    login_user(user)
+    return jsonify({"ok": True, "user": user.to_public_dict()})
 
 
 @auth_bp.route("/login", methods=["POST"])

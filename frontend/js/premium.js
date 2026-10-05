@@ -63,6 +63,13 @@ function showResult(html, ok) {
   checkoutMsg.innerHTML = `<div class="${ok ? "form-success" : "form-error"}">${html}</div>`;
 }
 
+// คำขอที่แพ้ตอนกดรัว ๆ ได้ already_premium กลับมาโดยไม่มี txn_id (ไม่ได้สร้าง Payment)
+// ถ้าต่อสตริงตรง ๆ จะขึ้น "เลขอ้างอิง: undefined"
+function checkoutDoneHtml(res) {
+  const ref = res.txn_id ? ` (เลขอ้างอิง: ${esc(res.txn_id)})` : "";
+  return `${esc(res.demo_notice)}${ref} กำลังพาไปหน้าบัญชี...`;
+}
+
 cardForm.addEventListener("submit", async (e) => {
   e.preventDefault();
   checkoutMsg.innerHTML = "";
@@ -73,7 +80,7 @@ cardForm.addEventListener("submit", async (e) => {
       expiry: document.getElementById("card-expiry").value.trim(),
       cvc: document.getElementById("card-cvc").value.trim(),
     });
-    showResult(`${esc(res.demo_notice)} (เลขอ้างอิง: ${esc(res.txn_id)}) กำลังพาไปหน้าบัญชี...`, true);
+    showResult(checkoutDoneHtml(res), true);
     setTimeout(() => window.location.href = "dashboard.html", 1500);
   } catch (err) {
     showResult(esc(err.message), false);
@@ -88,7 +95,7 @@ promptpayForm.addEventListener("submit", async (e) => {
       method: "promptpay",
       promptpay_ref: document.getElementById("pp-ref").value.trim(),
     });
-    showResult(`${esc(res.demo_notice)} (เลขอ้างอิง: ${esc(res.txn_id)}) กำลังพาไปหน้าบัญชี...`, true);
+    showResult(checkoutDoneHtml(res), true);
     setTimeout(() => window.location.href = "dashboard.html", 1500);
   } catch (err) {
     showResult(esc(err.message), false);
